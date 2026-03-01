@@ -28,6 +28,7 @@ class _SegmentationScreenState extends State<SegmentationScreen> {
   List<SegmentationPoint> _points = [];
   bool _isLoading = false;
   bool _showMask = true;
+  double _maskOpacity = 0.4; // Default opacity for mask overlay
   String _status = 'Tap on the object you want to remove';
   
   // Image dimensions for coordinate conversion
@@ -164,7 +165,7 @@ class _SegmentationScreenState extends State<SegmentationScreen> {
           IconButton(
             icon: Icon(_showMask ? Icons.visibility : Icons.visibility_off),
             onPressed: _maskId != null ? _toggleMask : null,
-            tooltip: 'Toggle mask',
+            tooltip: 'Toggle mask visibility',
           ),
         ],
       ),
@@ -214,13 +215,13 @@ class _SegmentationScreenState extends State<SegmentationScreen> {
               fit: BoxFit.contain,
             ),
 
-            // Mask overlay
+            // Mask overlay with adjustable opacity
             if (_maskId != null && _showMask)
               Positioned.fill(
                 child: Image.network(
                   _apiService.getMaskUrl(_maskId!),
                   fit: BoxFit.contain,
-                  color: Colors.red.withOpacity(0.4),
+                  color: Colors.red.withOpacity(_maskOpacity),
                   colorBlendMode: BlendMode.srcATop,
                   errorBuilder: (context, error, stackTrace) {
                     return const SizedBox.shrink();
@@ -280,6 +281,9 @@ class _SegmentationScreenState extends State<SegmentationScreen> {
       padding: const EdgeInsets.all(16),
       child: Column(
         children: [
+          // Mask opacity slider (only show when mask exists)
+          if (_maskId != null) _buildOpacitySlider(),
+          
           // Point count
           Text(
             '${_points.length} point(s) selected',
