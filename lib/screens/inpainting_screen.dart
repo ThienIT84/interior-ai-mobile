@@ -165,6 +165,96 @@ class _InpaintingScreenState extends State<InpaintingScreen> {
     return _buildProcessing();
   }
 
+  Widget _buildImagePage({
+    required String imageUrl,
+    required String label,
+    required Color labelColor,
+  }) {
+    return Stack(
+      children: [
+        // Image
+        Center(
+          child: Image.network(
+            imageUrl,
+            fit: BoxFit.contain,
+            loadingBuilder: (context, child, loadingProgress) {
+              if (loadingProgress == null) return child;
+              return const Center(child: CircularProgressIndicator());
+            },
+            errorBuilder: (context, error, stackTrace) {
+              return Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.error, size: 64, color: Colors.red),
+                  const SizedBox(height: 16),
+                  Text('Failed to load image: $error'),
+                ],
+              );
+            },
+          ),
+        ),
+        
+        // Label badge
+        Positioned(
+          top: 16,
+          left: 16,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              color: labelColor,
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.2),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ),
+        
+        // Swipe hint
+        Positioned(
+          bottom: 80,
+          left: 0,
+          right: 0,
+          child: Center(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.6),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: const [
+                  Icon(Icons.swipe, color: Colors.white, size: 20),
+                  SizedBox(width: 8),
+                  Text(
+                    'Swipe to compare',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildProcessing() {
     return Center(
       child: Padding(
@@ -282,29 +372,26 @@ class _InpaintingScreenState extends State<InpaintingScreen> {
 
   Widget _buildResult() {
     final fullResultUrl = '${_apiService.getResultUrl(_resultUrl!.split('/').last)}';
+    final originalImageUrl = _apiService.getImageUrl(widget.imageId);
     
     return Column(
       children: [
         Expanded(
-          child: Center(
-            child: Image.network(
-              fullResultUrl,
-              fit: BoxFit.contain,
-              loadingBuilder: (context, child, loadingProgress) {
-                if (loadingProgress == null) return child;
-                return const CircularProgressIndicator();
-              },
-              errorBuilder: (context, error, stackTrace) {
-                return Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.error, size: 64, color: Colors.red),
-                    const SizedBox(height: 16),
-                    Text('Failed to load result: $error'),
-                  ],
-                );
-              },
-            ),
+          child: PageView(
+            children: [
+              // Before (Original)
+              _buildImagePage(
+                imageUrl: originalImageUrl,
+                label: 'BEFORE',
+                labelColor: Colors.orange,
+              ),
+              // After (Result)
+              _buildImagePage(
+                imageUrl: fullResultUrl,
+                label: 'AFTER',
+                labelColor: Colors.green,
+              ),
+            ],
           ),
         ),
         

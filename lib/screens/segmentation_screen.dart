@@ -341,6 +341,46 @@ class _SegmentationScreenState extends State<SegmentationScreen> {
     );
   }
 
+  /// Build opacity slider widget
+  Widget _buildOpacitySlider() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade100,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.opacity, size: 20, color: Colors.grey),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Slider(
+              value: _maskOpacity,
+              min: 0.0,
+              max: 1.0,
+              divisions: 10,
+              label: _maskOpacity.toStringAsFixed(1),
+              onChanged: (value) {
+                setState(() {
+                  _maskOpacity = value;
+                });
+              },
+            ),
+          ),
+          Text(
+            '${(_maskOpacity * 100).toInt()}%',
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey.shade700,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   /// Navigate to inpainting screen
   void _goToInpainting() {
     if (_imageId == null || _maskId == null) return;
