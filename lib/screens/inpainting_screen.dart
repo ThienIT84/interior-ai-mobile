@@ -1,5 +1,10 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
+import 'dart:io';
+import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
+import 'package:image_gallery_saver/image_gallery_saver.dart';
+import 'package:share_plus/share_plus.dart';
 import '../services/api_service.dart';
 
 /// Screen to display inpainting progress and result
@@ -163,6 +168,142 @@ class _InpaintingScreenState extends State<InpaintingScreen> {
     }
 
     return _buildProcessing();
+  }
+
+  Future<void> _saveToGallery(String imageUrl) async {
+    try {
+      // Show loading
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Row(
+            children: [
+              SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              ),
+              SizedBox(width: 16),
+              Text('Downloading image...'),
+            ],
+          ),
+          duration: Duration(seconds: 30),
+        ),
+      );
+
+      // Download image
+      final response = await http.get(Uri.parse(imageUrl));
+      
+      if (response.statusCode == 200) {
+        // Save to gallery
+        final result = await ImageGallerySaver.saveImage(
+          response.bodyBytes,
+          name: "inpaint_result_${DateTime.now().millisecondsSinceEpoch}",
+          quality: 100,
+        );
+        
+        // Hide loading and show success
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        
+        if (result['isSuccess'] == true) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Row(
+                children: [
+                  Icon(Icons.check_circle, color: Colors.white),
+                  SizedBox(width: 16),
+                  Text('Saved to gallery!'),
+                ],
+              ),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 2),
+            ),
+          );
+        } else {
+          throw Exception('Failed to save image');
+        }
+      } else {
+        throw Exception('Failed to download image: ${response.statusCode}');
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.error, color: Colors.white),
+              const SizedBox(width: 16),
+              Expanded(child: Text('Save failed: $e')),
+            ],
+          ),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    }
+  }
+
+  Future<void> _shareImage(String imageUrl) async {
+    try {
+      // Show loading
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Row(
+            children: [
+              SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              ),
+              SizedBox(width: 16),
+              Text('Preparing to share...'),
+            ],
+          ),
+          duration: Duration(seconds: 30),
+        ),
+      );
+
+      // Download image
+      final response = await http.get(Uri.parse(imageUrl));
+      
+      if (response.statusCode == 200) {
+        // Save to temp directory
+        final tempDir = await getTemporaryDirectory();
+        final file = File('${tempDir.path}/inpaint_result_${DateTime.now().millisecondsSinceEpoch}.png');
+        await file.writeAsBytes(response.bodyBytes);
+        
+        // Hide loading
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        
+        // Share
+        await Share.shareXFiles(
+          [XFile(file.path)],
+          text: 'Check out my AI-generated empty room! 🏠✨',
+        );
+      } else {
+        throw Exception('Failed to download image: ${response.statusCode}');
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.error, color: Colors.white),
+              const SizedBox(width: 16),
+              Expanded(child: Text('Share failed: $e')),
+            ],
+          ),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    }
   }
 
   Widget _buildImagePage({
@@ -438,6 +579,44 @@ class _InpaintingScreenState extends State<InpaintingScreen> {
               ),
               
               const SizedBox(height: 16),
+              
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () async {
+                        await _saveToGallery(fullResultUrl);
+                      },
+                      icon: const Icon(Icons.download),
+                      label: const Text('Save'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                    ),
+                  ),
+                  
+                  const SizedBox(width: 12),
+                  
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () async {
+                        await _shareImage(fullResultUrl);
+                      },
+                      icon: const Icon(Icons.share),
+                      label: const Text('Share'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              
+              const SizedBox(height: 12),
               
               Row(
                 children: [
