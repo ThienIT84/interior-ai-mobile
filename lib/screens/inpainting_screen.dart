@@ -3,9 +3,10 @@ import 'dart:async';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
-import 'package:image_gallery_saver/image_gallery_saver.dart';
+import 'package:gal/gal.dart';
 import 'package:share_plus/share_plus.dart';
 import '../services/api_service.dart';
+import 'generation_screen.dart';
 
 /// Screen to display inpainting progress and result
 class InpaintingScreen extends StatefulWidget {
@@ -198,32 +199,27 @@ class _InpaintingScreenState extends State<InpaintingScreen> {
       
       if (response.statusCode == 200) {
         // Save to gallery
-        final result = await ImageGallerySaver.saveImage(
+        await Gal.putImageBytes(
           response.bodyBytes,
           name: "inpaint_result_${DateTime.now().millisecondsSinceEpoch}",
-          quality: 100,
         );
         
         // Hide loading and show success
         ScaffoldMessenger.of(context).hideCurrentSnackBar();
         
-        if (result['isSuccess'] == true) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Row(
-                children: [
-                  Icon(Icons.check_circle, color: Colors.white),
-                  SizedBox(width: 16),
-                  Text('Saved to gallery!'),
-                ],
-              ),
-              backgroundColor: Colors.green,
-              duration: Duration(seconds: 2),
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.white),
+                SizedBox(width: 16),
+                Text('Saved to gallery!'),
+              ],
             ),
-          );
-        } else {
-          throw Exception('Failed to save image');
-        }
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
       } else {
         throw Exception('Failed to download image: ${response.statusCode}');
       }
@@ -640,10 +636,14 @@ class _InpaintingScreenState extends State<InpaintingScreen> {
                   Expanded(
                     child: ElevatedButton.icon(
                       onPressed: () {
-                        // TODO: Navigate to generation screen
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Design generation coming soon!'),
+                        final resultId = _resultUrl!.split('/').last;
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => GenerationScreen(
+                              inpaintedImageId: resultId,
+                              originalImageId: widget.imageId,
+                            ),
                           ),
                         );
                       },
