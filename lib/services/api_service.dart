@@ -47,6 +47,8 @@ class ApiService {
   Future<Map<String, dynamic>> segmentWithPoints({
     required String imageId,
     required List<Map<String, dynamic>> points,
+    String? segmentationBackend,
+    String? textPrompt,
   }) async {
     try {
       var uri = Uri.parse('${AppConfig.baseUrl}/api/v1/segmentation/segment-points');
@@ -56,6 +58,8 @@ class ApiService {
         body: json.encode({
           'image_id': imageId,
           'points': points,
+          if (segmentationBackend != null) 'segmentation_backend': segmentationBackend,
+          if (textPrompt != null && textPrompt.isNotEmpty) 'text_prompt': textPrompt,
         }),
       ).timeout(
         AppConfig.receiveTimeout,
@@ -71,6 +75,27 @@ class ApiService {
       }
     } catch (e) {
       throw Exception('Segmentation error: $e');
+    }
+  }
+
+  /// Fetch backend segmentation configuration for debug/UI defaults
+  Future<Map<String, dynamic>> getSegmentationBackendDebug() async {
+    try {
+      var uri = Uri.parse('${AppConfig.baseUrl}/api/v1/segmentation/debug/backend');
+      var response = await http.get(uri).timeout(
+        const Duration(seconds: 10),
+        onTimeout: () {
+          throw Exception('Debug endpoint timeout');
+        },
+      );
+
+      if (response.statusCode == 200) {
+        return json.decode(response.body) as Map<String, dynamic>;
+      } else {
+        throw Exception('Debug endpoint failed: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Debug endpoint error: $e');
     }
   }
 
@@ -144,92 +169,7 @@ class ApiService {
     return '${AppConfig.baseUrl}/api/v1/inpainting/result/$resultId';
   }
 
-  // ── Generation (Week 3) ─────────────────────────────────────────────────
-
-  /// Get available design styles from backend
-  Future<List<Map<String, dynamic>>> getStyles() async {
-    try {
-      final uri = Uri.parse('${AppConfig.baseUrl}/api/v1/generation/styles');
-      final response = await http.get(uri).timeout(
-        const Duration(seconds: 10),
-        onTimeout: () => throw Exception('Styles request timeout'),
-      );
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body) as Map<String, dynamic>;
-        return List<Map<String, dynamic>>.from(data['styles'] as List);
-      } else {
-        throw Exception('Get styles failed: ${response.statusCode}');
-      }
-    } catch (e) {
-      throw Exception('Get styles error: $e');
-    }
-  }
-
-  /// Submit async ControlNet generation job
-  /// [imageId] can be an inpainting result_id or original image_id
-  /// Returns full job response map (contains job_id, status, style, message)
-  Future<Map<String, dynamic>> generateDesign({
-    required String imageId,
-    required String style,
-    double? guidanceScale,
-    int? steps,
-    int? seed,
-  }) async {
-    try {
-      final uri = Uri.parse('${AppConfig.baseUrl}/api/v1/generation/generate-design');
-      final body = <String, dynamic>{
-        'image_id': imageId,
-        'style': style,
-        if (guidanceScale != null) 'guidance_scale': guidanceScale,
-        if (steps != null) 'steps': steps,
-        if (seed != null) 'seed': seed,
-      };
-      final response = await http.post(
-        uri,
-        headers: {'Content-Type': 'application/json'},
-        body: json.encode(body),
-      ).timeout(
-        const Duration(seconds: 30),
-        onTimeout: () => throw Exception('Generate design request timeout'),
-      );
-      if (response.statusCode == 200) {
-        return json.decode(response.body) as Map<String, dynamic>;
-      } else {
-        throw Exception('Generate design failed: ${response.statusCode} - ${response.body}');
-      }
-    } catch (e) {
-      throw Exception('Generate design error: $e');
-    }
-  }
-
-  /// Poll ControlNet generation job status
-  Future<Map<String, dynamic>> checkGenerationJobStatus(String jobId) async {
-    try {
-      final uri = Uri.parse('${AppConfig.baseUrl}/api/v1/generation/job-status/$jobId');
-      final response = await http.get(uri).timeout(
-        const Duration(seconds: 10),
-        onTimeout: () => throw Exception('Job status check timeout'),
-      );
-      if (response.statusCode == 200) {
-        return json.decode(response.body) as Map<String, dynamic>;
-      } else {
-        throw Exception('Generation status check failed: ${response.statusCode}');
-      }
-    } catch (e) {
-      throw Exception('Generation status check error: $e');
-    }
-  }
-
-  /// Get generation result image URL
-  String getGenerationResultUrl(String resultId) {
-    return '${AppConfig.baseUrl}/api/v1/generation/result/$resultId';
-  }
-
-  // ── Option 1: Targeted Furniture Placement ─────────────────────────────
-
-  /// Submit async furniture placement job.
-  /// [imageId] – usually the inpainting result (empty room).
-  /// [bboxX/Y/W/H] – normalized coords 0.0–1.0 relative to displayed image.
+  /// Submit furniture placement job
   Future<Map<String, dynamic>> placeFurniture({
     required String imageId,
     required double bboxX,
@@ -239,8 +179,8 @@ class ApiService {
     required String furnitureDescription,
   }) async {
     try {
-      final uri = Uri.parse('${AppConfig.baseUrl}/api/v1/generation/place-furniture');
-      final response = await http.post(
+      var uri = Uri.parse('${AppConfig.baseUrl}/api/v1/generation/place-furniture');
+      var response = await http.post(
         uri,
         headers: {'Content-Type': 'application/json'},
         body: json.encode({
@@ -252,40 +192,108 @@ class ApiService {
           'furniture_description': furnitureDescription,
         }),
       ).timeout(
-        const Duration(seconds: 30),
-        onTimeout: () => throw Exception('Place furniture request timeout'),
+        AppConfig.receiveTimeout,
+        onTimeout: () {
+          throw Exception('Furniture placement submit timeout');
+        },
       );
+
       if (response.statusCode == 200) {
         return json.decode(response.body) as Map<String, dynamic>;
       } else {
-        throw Exception('Place furniture failed: ${response.statusCode} - ${response.body}');
+        throw Exception('Place furniture failed (${response.statusCode}): ${response.body}');
       }
     } catch (e) {
       throw Exception('Place furniture error: $e');
     }
   }
 
-  /// Poll furniture placement job status.
+  /// Poll furniture placement job status
   Future<Map<String, dynamic>> checkPlacementJobStatus(String jobId) async {
     try {
-      final uri = Uri.parse(
-          '${AppConfig.baseUrl}/api/v1/generation/placement-job-status/$jobId');
-      final response = await http.get(uri).timeout(
+      var uri = Uri.parse('${AppConfig.baseUrl}/api/v1/generation/placement-job-status/$jobId');
+      var response = await http.get(uri).timeout(
         const Duration(seconds: 10),
-        onTimeout: () => throw Exception('Placement status check timeout'),
+        onTimeout: () {
+          throw Exception('Placement status check timeout');
+        },
       );
+
       if (response.statusCode == 200) {
         return json.decode(response.body) as Map<String, dynamic>;
       } else {
-        throw Exception('Placement status check failed: ${response.statusCode}');
+        throw Exception('Placement status check failed (${response.statusCode}): ${response.body}');
       }
     } catch (e) {
-      throw Exception('Placement status check error: $e');
+      throw Exception('Placement status error: $e');
     }
   }
 
-  /// Get placement result image URL.
+  /// Get furniture placement result URL
   String getPlacementResultUrl(String resultId) {
     return '${AppConfig.baseUrl}/api/v1/generation/placement-result/$resultId';
+  }
+
+  /// Submit style generation job
+  Future<Map<String, dynamic>> generateDesign({
+    required String imageId,
+    required String style,
+    double? guidanceScale,
+    int? steps,
+    int? seed,
+  }) async {
+    try {
+      var uri = Uri.parse('${AppConfig.baseUrl}/api/v1/generation/generate-design');
+      var response = await http.post(
+        uri,
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
+          'image_id': imageId,
+          'style': style,
+          if (guidanceScale != null) 'guidance_scale': guidanceScale,
+          if (steps != null) 'steps': steps,
+          if (seed != null) 'seed': seed,
+        }),
+      ).timeout(
+        AppConfig.receiveTimeout,
+        onTimeout: () {
+          throw Exception('Generate design submit timeout');
+        },
+      );
+
+      if (response.statusCode == 200) {
+        return json.decode(response.body) as Map<String, dynamic>;
+      } else {
+        throw Exception('Generate design failed (${response.statusCode}): ${response.body}');
+      }
+    } catch (e) {
+      throw Exception('Generate design error: $e');
+    }
+  }
+
+  /// Poll style generation job status
+  Future<Map<String, dynamic>> checkGenerationJobStatus(String jobId) async {
+    try {
+      var uri = Uri.parse('${AppConfig.baseUrl}/api/v1/generation/job-status/$jobId');
+      var response = await http.get(uri).timeout(
+        const Duration(seconds: 10),
+        onTimeout: () {
+          throw Exception('Generation status check timeout');
+        },
+      );
+
+      if (response.statusCode == 200) {
+        return json.decode(response.body) as Map<String, dynamic>;
+      } else {
+        throw Exception('Generation status check failed (${response.statusCode}): ${response.body}');
+      }
+    } catch (e) {
+      throw Exception('Generation status error: $e');
+    }
+  }
+
+  /// Get style generation result URL
+  String getGenerationResultUrl(String resultId) {
+    return '${AppConfig.baseUrl}/api/v1/generation/result/$resultId';
   }
 }

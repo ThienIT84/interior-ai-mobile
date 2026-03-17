@@ -19,29 +19,80 @@ class SegmentationScreen extends StatefulWidget {
 
 class _SegmentationScreenState extends State<SegmentationScreen> {
   final ApiService _apiService = ApiService();
-  
-  // State variables
+  static const String _backendLocal = 'local';
+  static const String _backendSam3 = 'sam3_replicate';
+
   String? _imageId;
   int? _imageWidth;
   int? _imageHeight;
   String? _maskId;
-  List<SegmentationPoint> _points = [];
+  final List<SegmentationPoint> _points = [];
   bool _isLoading = false;
   bool _showMask = true;
-  double _maskOpacity = 0.4; // Default opacity for mask overlay
-  String _status = 'Tap on the object you want to remove';
-  
-  // Image dimensions for coordinate conversion
-  Size? _imageSize;
-  final GlobalKey _imageKey = GlobalKey();
+  double _maskOpacity = 0.4;
+  String _status = 'Chạm vào vật thể hoặc nhập mô tả';
+  String _selectedSegmentationBackend = _backendSam3;
+  String? _defaultBackend;
+  String? _selectedModelName;
+  String? _backendDebugError;
+  final TextEditingController _textPromptController = TextEditingController(); // Bỏ chữ mặc định 'object' để giao diện sạch hơn
+
+  final GlobalKey _imageContainerKey = GlobalKey();
 
   @override
   void initState() {
     super.initState();
+    _loadBackendDebugInfo();
     _uploadImage();
   }
 
-  /// Upload image to backend
+  @override
+  void dispose() {
+    _textPromptController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadBackendDebugInfo() async {
+    try {
+      final result = await _apiService.getSegmentationBackendDebug();
+      final segmentation = result['segmentation'] as Map<String, dynamic>;
+      final defaultBackend = segmentation['default_backend'] as String? ?? _backendLocal;
+      final defaultModel = segmentation['default_model'] as String?;
+
+      if (!mounted) return;
+
+      setState(() {
+        _defaultBackend = defaultBackend;
+        _selectedSegmentationBackend = defaultBackend;
+        _selectedModelName = defaultModel;
+        _backendDebugError = null;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _backendDebugError = e.toString();
+      });
+    }
+  }
+
+  void _changeSegmentationBackend(String backend) {
+    setState(() {
+      _selectedSegmentationBackend = backend;
+      _selectedModelName = backend == _backendSam3
+          ? 'mattsays/sam3-image'
+          : 'local_sam:vit_b';
+      _maskId = null;
+      _points.clear(); 
+      _status = backend == _backendSam3
+          ? 'Chạm vào vật thể hoặc nhập mô tả'
+          : 'Chạm vào vật thể bạn muốn chọn';
+    });
+  }
+
+  String _backendLabel(String backend) {
+    return backend == _backendSam3 ? 'SAM3' : 'SAM';
+  }
+
   Future<void> _uploadImage() async {
     setState(() {
       _isLoading = true;
@@ -54,7 +105,9 @@ class _SegmentationScreenState extends State<SegmentationScreen> {
         _imageId = result['image_id'] as String;
         _imageWidth = result['image_width'] as int;
         _imageHeight = result['image_height'] as int;
-        _status = 'Tap on the object you want to remove';
+        _status = _selectedSegmentationBackend == _backendSam3 
+            ? 'Chạm vào vật thể hoặc nhập mô tả' 
+            : 'Chạm vào vật thể bạn muốn chọn';
         _isLoading = false;
       });
     } catch (e) {
@@ -65,38 +118,55 @@ class _SegmentationScreenState extends State<SegmentationScreen> {
     }
   }
 
-  /// Handle tap on image
   void _handleImageTap(TapDownDetails details) {
     if (_imageId == null || _isLoading) return;
 
-    // Get image widget size
-    final RenderBox? renderBox = 
-        _imageKey.currentContext?.findRenderObject() as RenderBox?;
+    final RenderBox? renderBox =
+        _imageContainerKey.currentContext?.findRenderObject() as RenderBox?;
     if (renderBox == null) return;
 
-    final size = renderBox.size;
+    final viewportSize = renderBox.size;
     final localPosition = details.localPosition;
+    final imageRect = _getDisplayedImageRect(viewportSize);
 
-    // Convert to normalized coordinates (0-1) for display
-    final normalizedX = localPosition.dx / size.width;
-    final normalizedY = localPosition.dy / size.height;
+    if (!imageRect.contains(localPosition)) {
+      setState(() {
+        _status = 'Tap inside the image area';
+      });
+      return;
+    }
 
-    // Add point (stored as normalized for UI display)
+    final normalizedX = (localPosition.dx - imageRect.left) / imageRect.width;
+    final normalizedY = (localPosition.dy - imageRect.top) / imageRect.height;
+
     setState(() {
       _points.add(SegmentationPoint(
         x: normalizedX,
         y: normalizedY,
-        label: 1, // Foreground
+        label: 1,
       ));
     });
 
-    // Trigger segmentation
     _performSegmentation();
   }
 
-  /// Perform segmentation with current points
   Future<void> _performSegmentation() async {
-    if (_imageId == null || _points.isEmpty) return;
+    final textPrompt = _selectedSegmentationBackend == _backendSam3
+        ? _textPromptController.text.trim()
+        : null;
+
+    final bool hasPoints = _points.isNotEmpty;
+    final bool hasText = textPrompt != null && textPrompt.isNotEmpty;
+
+    // [Cập nhật] Cho phép chạy API nếu có điểm chạm HOẶC có text mô tả
+    if (_imageId == null || (!hasPoints && !hasText)) {
+      if (!hasPoints && !hasText) {
+        setState(() {
+          _status = 'Vui lòng chạm vào ảnh hoặc nhập mô tả!';
+        });
+      }
+      return;
+    }
 
     setState(() {
       _isLoading = true;
@@ -107,11 +177,17 @@ class _SegmentationScreenState extends State<SegmentationScreen> {
       final result = await _apiService.segmentWithPoints(
         imageId: _imageId!,
         points: _points.map((p) => p.toPixelJson(_imageWidth!, _imageHeight!)).toList(),
+        segmentationBackend: _selectedSegmentationBackend,
+        textPrompt: textPrompt,
       );
 
       setState(() {
         _maskId = result['mask_id'] as String;
-        _status = 'Segmentation complete! ${_points.length} point(s)';
+        _selectedModelName = result['segmentation_model'] as String? ?? _selectedModelName;
+        final backendUsed = result['segmentation_backend'] as String? ?? _selectedSegmentationBackend;
+        
+        String actionInfo = hasPoints ? '${_points.length} point(s)' : 'text prompt';
+        _status = 'Segmentation complete with ${_backendLabel(backendUsed)} ($actionInfo)';
         _isLoading = false;
       });
     } catch (e) {
@@ -122,136 +198,135 @@ class _SegmentationScreenState extends State<SegmentationScreen> {
     }
   }
 
-  /// Clear all points and mask
   void _clearPoints() {
     setState(() {
       _points.clear();
       _maskId = null;
-      _status = 'Tap on the object you want to remove';
+      _textPromptController.clear(); // Xóa luôn chữ khi bấm clear
+      _status = _selectedSegmentationBackend == _backendSam3 
+            ? 'Chạm vào vật thể hoặc nhập mô tả' 
+            : 'Chạm vào vật thể bạn muốn chọn';
     });
   }
 
-  /// Undo last point
   void _undoLastPoint() {
     if (_points.isEmpty) return;
-    
+
     setState(() {
       _points.removeLast();
       if (_points.isEmpty) {
         _maskId = null;
-        _status = 'Tap on the object you want to remove';
+        _status = _selectedSegmentationBackend == _backendSam3 
+            ? 'Chạm vào vật thể hoặc nhập mô tả' 
+            : 'Chạm vào vật thể bạn muốn chọn';
       }
     });
 
-    // Re-segment if points remain
-    if (_points.isNotEmpty) {
+    // Nếu vẫn còn điểm HOẶC có text, thì chạy lại segmentation
+    if (_points.isNotEmpty || (_selectedSegmentationBackend == _backendSam3 && _textPromptController.text.isNotEmpty)) {
       _performSegmentation();
     }
   }
 
-  /// Toggle mask visibility
   void _toggleMask() {
     setState(() {
       _showMask = !_showMask;
     });
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Select Object'),
-        actions: [
-          IconButton(
-            icon: Icon(_showMask ? Icons.visibility : Icons.visibility_off),
-            onPressed: _maskId != null ? _toggleMask : null,
-            tooltip: 'Toggle mask visibility',
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          // Status bar
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(16),
-            color: Colors.blue.shade50,
-            child: Text(
-              _status,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
+  Rect _getDisplayedImageRect(Size viewportSize) {
+    final imageWidth = _imageWidth?.toDouble();
+    final imageHeight = _imageHeight?.toDouble();
 
-          // Image with overlay
-          Expanded(
-            child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : _buildImageWithOverlay(),
-          ),
+    if (imageWidth == null || imageHeight == null ||
+        viewportSize.width <= 0 || viewportSize.height <= 0) {
+      return Rect.fromLTWH(0, 0, viewportSize.width, viewportSize.height);
+    }
 
-          // Control buttons
-          _buildControlButtons(),
-        ],
-      ),
-    );
+    final imageAspect = imageWidth / imageHeight;
+    final viewportAspect = viewportSize.width / viewportSize.height;
+
+    double displayWidth;
+    double displayHeight;
+    double left;
+    double top;
+
+    if (imageAspect > viewportAspect) {
+      displayWidth = viewportSize.width;
+      displayHeight = displayWidth / imageAspect;
+      left = 0;
+      top = (viewportSize.height - displayHeight) / 2;
+    } else {
+      displayHeight = viewportSize.height;
+      displayWidth = displayHeight * imageAspect;
+      top = 0;
+      left = (viewportSize.width - displayWidth) / 2;
+    }
+
+    return Rect.fromLTWH(left, top, displayWidth, displayHeight);
   }
 
-  /// Build image with point markers and mask overlay
   Widget _buildImageWithOverlay() {
     return Center(
-      child: GestureDetector(
-        onTapDown: _handleImageTap,
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            // Original image
-            Image.file(
-              widget.imageFile,
-              key: _imageKey,
-              fit: BoxFit.contain,
-            ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final viewportSize = Size(constraints.maxWidth, constraints.maxHeight);
+          final imageRect = _getDisplayedImageRect(viewportSize);
 
-            // Mask overlay with adjustable opacity
-            if (_maskId != null && _showMask)
-              Positioned.fill(
-                child: Image.network(
-                  _apiService.getMaskUrl(_maskId!),
-                  fit: BoxFit.contain,
-                  color: Colors.red.withOpacity(_maskOpacity),
-                  colorBlendMode: BlendMode.srcATop,
-                  errorBuilder: (context, error, stackTrace) {
-                    return const SizedBox.shrink();
-                  },
-                ),
+          return GestureDetector(
+            onTapDown: _handleImageTap,
+            child: SizedBox(
+              key: _imageContainerKey,
+              width: viewportSize.width,
+              height: viewportSize.height,
+              child: Stack(
+                children: [
+                  Positioned(
+                    left: imageRect.left,
+                    top: imageRect.top,
+                    width: imageRect.width,
+                    height: imageRect.height,
+                    child: Image.file(
+                      widget.imageFile,
+                      fit: BoxFit.fill,
+                    ),
+                  ),
+                  if (_maskId != null && _showMask)
+                    Positioned(
+                      left: imageRect.left,
+                      top: imageRect.top,
+                      width: imageRect.width,
+                      height: imageRect.height,
+                      child: Image.network(
+                        '${_apiService.getMaskUrl(_maskId!)}?t=${DateTime.now().millisecondsSinceEpoch}',
+                        fit: BoxFit.fill,
+                        color: Colors.red.withOpacity(_maskOpacity),
+                        colorBlendMode: BlendMode.srcATop,
+                        errorBuilder: (context, error, stackTrace) {
+                          return const SizedBox.shrink();
+                        },
+                      ),
+                    ),
+                  ..._buildPointMarkers(viewportSize),
+                ],
               ),
-
-            // Point markers
-            ..._buildPointMarkers(),
-          ],
-        ),
+            ),
+          );
+        },
       ),
     );
   }
 
-  /// Build point markers overlay
-  List<Widget> _buildPointMarkers() {
-    final RenderBox? renderBox = 
-        _imageKey.currentContext?.findRenderObject() as RenderBox?;
-    if (renderBox == null) return [];
-
-    final size = renderBox.size;
+  List<Widget> _buildPointMarkers(Size viewportSize) {
+    final imageRect = _getDisplayedImageRect(viewportSize);
 
     return _points.asMap().entries.map((entry) {
       final index = entry.key;
       final point = entry.value;
 
       return Positioned(
-        left: point.x * size.width - 12,
-        top: point.y * size.height - 12,
+        left: imageRect.left + point.x * imageRect.width - 12,
+        top: imageRect.top + point.y * imageRect.height - 12,
         child: Container(
           width: 24,
           height: 24,
@@ -275,16 +350,52 @@ class _SegmentationScreenState extends State<SegmentationScreen> {
     }).toList();
   }
 
-  /// Build control buttons
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Select Object'),
+        actions: [
+          IconButton(
+            icon: Icon(_showMask ? Icons.visibility : Icons.visibility_off),
+            onPressed: _maskId != null ? _toggleMask : null,
+            tooltip: 'Toggle mask visibility',
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            color: Colors.blue.shade50,
+            child: Text(
+              _status,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          _buildBackendSelector(),
+          Expanded(
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _buildImageWithOverlay(),
+          ),
+          _buildControlButtons(),
+        ],
+      ),
+    );
+  }
+
   Widget _buildControlButtons() {
     return Container(
       padding: const EdgeInsets.all(16),
       child: Column(
         children: [
-          // Mask opacity slider (only show when mask exists)
           if (_maskId != null) _buildOpacitySlider(),
-          
-          // Point count
           Text(
             '${_points.length} point(s) selected',
             style: TextStyle(
@@ -293,11 +404,8 @@ class _SegmentationScreenState extends State<SegmentationScreen> {
             ),
           ),
           const SizedBox(height: 12),
-
-          // Action buttons
           Row(
             children: [
-              // Undo button
               Expanded(
                 child: OutlinedButton.icon(
                   onPressed: _points.isNotEmpty ? _undoLastPoint : null,
@@ -306,11 +414,11 @@ class _SegmentationScreenState extends State<SegmentationScreen> {
                 ),
               ),
               const SizedBox(width: 12),
-
-              // Clear button
               Expanded(
                 child: OutlinedButton.icon(
-                  onPressed: _points.isNotEmpty ? _clearPoints : null,
+                  onPressed: (_points.isNotEmpty || _textPromptController.text.isNotEmpty || _maskId != null) 
+                      ? _clearPoints 
+                      : null,
                   icon: const Icon(Icons.clear),
                   label: const Text('Clear'),
                   style: OutlinedButton.styleFrom(
@@ -321,8 +429,6 @@ class _SegmentationScreenState extends State<SegmentationScreen> {
             ],
           ),
           const SizedBox(height: 12),
-
-          // Next button
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
@@ -341,7 +447,124 @@ class _SegmentationScreenState extends State<SegmentationScreen> {
     );
   }
 
-  /// Build opacity slider widget
+  Widget _buildBackendSelector() {
+    final defaultText = _defaultBackend == null
+        ? 'Loading backend config...'
+        : 'Default backend: ${_backendLabel(_defaultBackend!)}';
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+      color: Colors.grey.shade50,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.tune, size: 18, color: Colors.blueGrey),
+              const SizedBox(width: 8),
+              const Text(
+                'Segmentation Backend',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          SegmentedButton<String>(
+            segments: const [
+              ButtonSegment<String>(
+                value: _backendLocal,
+                label: Text('SAM'),
+                icon: Icon(Icons.memory),
+              ),
+              ButtonSegment<String>(
+                value: _backendSam3,
+                label: Text('SAM3'),
+                icon: Icon(Icons.cloud),
+              ),
+            ],
+            selected: {_selectedSegmentationBackend},
+            onSelectionChanged: (selection) {
+              _changeSegmentationBackend(selection.first);
+            },
+          ),
+          const SizedBox(height: 8),
+          Text(
+            defaultText,
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+          ),
+          if (_selectedSegmentationBackend == _backendSam3) ..._buildTextPromptInput(),
+          if (_selectedModelName != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                'Model: $_selectedModelName',
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+              ),
+            ),
+          if (_backendDebugError != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                'Debug endpoint unavailable: $_backendDebugError',
+                style: const TextStyle(fontSize: 12, color: Colors.red),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _buildTextPromptInput() {
+    return [
+      const SizedBox(height: 10),
+      Row(
+        children: [
+          const Icon(Icons.text_fields, size: 16, color: Colors.blueGrey),
+          const SizedBox(width: 6),
+          const Text(
+            'Mô tả vật thể',
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            '(Tùy chọn: Nhập để SAM3 tự tìm)',
+            style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+          ),
+        ],
+      ),
+      const SizedBox(height: 6),
+      TextField(
+        controller: _textPromptController,
+        textInputAction: TextInputAction.done,
+        onSubmitted: (_) {
+          // [Cập nhật] Bấm Enter trên bàn phím là chạy tìm kiếm luôn
+          _performSegmentation();
+        },
+        decoration: InputDecoration(
+          hintText: 'VD: sofa, chair, dog, person...',
+          prefixIcon: const Icon(Icons.search, size: 20),
+          suffixIcon: _textPromptController.text.isNotEmpty
+              ? IconButton(
+                  icon: const Icon(Icons.clear, size: 18),
+                  onPressed: () {
+                    _textPromptController.clear();
+                    setState(() {});
+                  },
+                )
+              : null,
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+          isDense: true,
+        ),
+        onChanged: (_) => setState(() {}),
+      ),
+    ];
+  }
+
   Widget _buildOpacitySlider() {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -381,10 +604,9 @@ class _SegmentationScreenState extends State<SegmentationScreen> {
     );
   }
 
-  /// Navigate to inpainting screen
   void _goToInpainting() {
     if (_imageId == null || _maskId == null) return;
-    
+
     Navigator.push(
       context,
       MaterialPageRoute(
