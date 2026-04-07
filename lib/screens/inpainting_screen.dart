@@ -141,7 +141,6 @@ class _InpaintingScreenState extends State<InpaintingScreen> {
         });
       } catch (e) {
         // Continue polling on temporary errors
-        print('Polling error (attempt $pollCount/$maxPolls): $e');
         // Don't show error to user, just keep polling
         // Backend might be busy processing
       }
