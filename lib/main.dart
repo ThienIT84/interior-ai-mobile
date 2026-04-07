@@ -1,8 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:http/http.dart' as http;
-import 'config.dart';
 import 'screens/segmentation_screen.dart';
 
 void main() => runApp(const MaterialApp(
@@ -47,37 +45,6 @@ class _InteriorAppState extends State<InteriorApp> {
     );
   }
 
-  // Hàm gửi ảnh sang Backend (GTX 1650)
-  Future uploadImage() async {
-    if (_image == null) return;
-    setState(() => _status = "🚀 Đang gửi sang AI...");
-
-    try {
-      // Sử dụng config tự động (localhost với ADB reverse)
-      var uri = Uri.parse(AppConfig.predictEndpoint);
-      var request = http.MultipartRequest('POST', uri);
-      request.files.add(await http.MultipartFile.fromPath('file', _image!.path));
-
-      // Send with timeout (120s for SAM processing)
-      var streamedResponse = await request.send().timeout(
-        AppConfig.uploadTimeout,
-        onTimeout: () {
-          throw Exception('Upload timeout - SAM processing took too long');
-        },
-      );
-      
-      if (streamedResponse.statusCode == 200) {
-        var resBody = await streamedResponse.stream.bytesToString();
-        setState(() => _status = "✅ AI phản hồi: $resBody");
-      } else {
-        var errorBody = await streamedResponse.stream.bytesToString();
-        setState(() => _status = "❌ Lỗi ${streamedResponse.statusCode}: $errorBody");
-      }
-    } catch (e) {
-      setState(() => _status = "❌ Không kết nối được Server: $e");
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -112,18 +79,6 @@ class _InteriorAppState extends State<InteriorApp> {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.blue,
                       foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: uploadImage,
-                    icon: const Icon(Icons.upload),
-                    label: const Text("TEST OLD API"),
-                    style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 16),
                     ),
                   ),
