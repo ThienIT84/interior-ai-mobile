@@ -425,6 +425,22 @@ class _GenerationViewState extends State<GenerationView>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // ── Model selector ────────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Text(
+              'Chọn model AI',
+              style: GoogleFonts.montserrat(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textPrimary,
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          _buildModelSelector(),
+          const SizedBox(height: 16),
+          // ── Style selector ───────────────────────────────────────
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Text(
@@ -459,6 +475,75 @@ class _GenerationViewState extends State<GenerationView>
           const SizedBox(height: 16),
           _buildGenerateButton(),
         ],
+      ),
+    );
+  }
+
+  // ── Model selector (ChoiceChip row) ───────────────────────────
+  Widget _buildModelSelector() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Row(
+        children: GenerationProvider.modelOptions.map((model) {
+          final isSelected = model.id == _provider.selectedModelId;
+          return Expanded(
+            child: Padding(
+              padding: EdgeInsets.only(
+                right: model.id == GenerationProvider.modelOptions.first.id ? 6 : 0,
+                left: model.id == GenerationProvider.modelOptions.last.id ? 6 : 0,
+              ),
+              child: GestureDetector(
+                onTap: () => _provider.selectModel(model.id),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 250),
+                  curve: Curves.easeInOut,
+                  padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? AppColors.primary.withOpacity(0.15)
+                        : AppColors.surface,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: isSelected ? AppColors.primary : AppColors.glassBorder,
+                      width: isSelected ? 1.5 : 1,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        model.icon,
+                        size: 18,
+                        color: isSelected ? AppColors.primary : AppColors.textSecondary,
+                      ),
+                      const SizedBox(width: 8),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            model.displayName,
+                            style: GoogleFonts.montserrat(
+                              fontSize: 13,
+                              fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                              color: isSelected ? AppColors.primary : AppColors.textPrimary,
+                            ),
+                          ),
+                          Text(
+                            model.subtitle,
+                            style: GoogleFonts.montserrat(
+                              fontSize: 10,
+                              color: AppColors.textDim,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        }).toList(),
       ),
     );
   }
