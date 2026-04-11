@@ -675,13 +675,17 @@ class _SegmentationViewState extends State<SegmentationView> {
               size: 20,
             ),
             const SizedBox(width: 8),
-            Text(
-              canProceed ? 'GENERATE' : 'SELECT FIRST',
-              style: GoogleFonts.montserrat(
-                color: canProceed ? Colors.white : AppColors.textDim,
-                fontSize: 14,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1,
+            Flexible(
+              child: Text(
+                canProceed ? 'GENERATE' : 'SELECT FIRST',
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+                style: GoogleFonts.montserrat(
+                  color: canProceed ? Colors.white : AppColors.textDim,
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1,
+                ),
               ),
             ),
           ],
