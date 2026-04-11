@@ -8,6 +8,7 @@ import '../../../core/constants/app_colors.dart';
 import '../providers/segmentation_provider.dart';
 import '../widgets/pulsing_point_marker.dart';
 import '../../generation/views/generation_view.dart';
+import '../../../screens/inpainting_screen.dart';
 
 class SegmentationView extends StatefulWidget {
   final File imageFile;
@@ -524,6 +525,14 @@ class _SegmentationViewState extends State<SegmentationView> {
                     ),
                     const SizedBox(width: 10),
                     _buildToolButton(
+                      icon: Icons.cleaning_services_rounded,
+                      label: 'Remove',
+                      onTap: provider.hasMask
+                          ? () => _navigateToInpainting(provider)
+                          : null,
+                    ),
+                    const SizedBox(width: 10),
+                    _buildToolButton(
                       icon: Icons.auto_awesome,
                       label: 'Design',
                       onTap: provider.imageId != null
@@ -626,6 +635,19 @@ class _SegmentationViewState extends State<SegmentationView> {
     );
   }
 
+  void _navigateToInpainting(SegmentationProvider provider) {
+    if (provider.imageId == null || provider.maskId == null) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => InpaintingScreen(
+          imageId: provider.imageId!,
+          maskId: provider.maskId!,
+        ),
+      ),
+    );
+  }
+
   void _navigateToGeneration(SegmentationProvider provider) {
     Navigator.push(
       context,
@@ -643,7 +665,7 @@ class _SegmentationViewState extends State<SegmentationView> {
 
     return GestureDetector(
       onTap: canProceed
-          ? () => _navigateToGeneration(provider)
+          ? () => _navigateToInpainting(provider)
           : null,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 300),
@@ -670,14 +692,14 @@ class _SegmentationViewState extends State<SegmentationView> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
-              canProceed ? Icons.auto_fix_high : Icons.touch_app_outlined,
+              canProceed ? Icons.cleaning_services_rounded : Icons.touch_app_outlined,
               color: canProceed ? Colors.white : AppColors.textDim,
               size: 20,
             ),
             const SizedBox(width: 8),
             Flexible(
               child: Text(
-                canProceed ? 'GENERATE' : 'SELECT FIRST',
+                canProceed ? 'REMOVE' : 'SELECT FIRST',
                 overflow: TextOverflow.ellipsis,
                 maxLines: 1,
                 style: GoogleFonts.montserrat(
