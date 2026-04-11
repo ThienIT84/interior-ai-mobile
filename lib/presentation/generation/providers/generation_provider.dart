@@ -1,0 +1,308 @@
+import 'dart:async';
+import 'package:flutter/material.dart';
+import '../../../data/datasources/remote_datasource.dart';
+
+/// Enum for the two operating modes of the Generation screen
+enum GenerationMode { design, placement }
+
+/// Represents a design style option
+class StyleOption {
+  final String name;
+  final String displayName;
+  final String description;
+  final IconData icon;
+  final List<Color> gradient;
+
+  const StyleOption({
+    required this.name,
+    required this.displayName,
+    required this.description,
+    required this.icon,
+    required this.gradient,
+  });
+}
+
+/// Provider managing state for the Generation screen.
+///
+/// Handles two workflows:
+///   1. Generate Design – applies a style to the whole room
+///   2. Place Furniture – inpaints an object inside a user-drawn bbox
+class GenerationProvider with ChangeNotifier {
+  final RemoteDataSource _dataSource = RemoteDataSource();
+
+  // ── Current mode ──────────────────────────────────────────────────
+  GenerationMode _mode = GenerationMode.design;
+  GenerationMode get mode => _mode;
+
+  void setMode(GenerationMode m) {
+    _mode = m;
+    notifyListeners();
+  }
+
+  // ── Image / context passed from previous screen ───────────────────
+  String? _imageId;
+  String? get imageId => _imageId;
+
+  String? _originalImageUrl;
+  String? get originalImageUrl => _originalImageUrl;
+
+  void setImageContext({required String imageId}) {
+    _imageId = imageId;
+    _originalImageUrl = _dataSource.getImageUrl(imageId);
+    notifyListeners();
+  }
+
+  // ── Styles ────────────────────────────────────────────────────────
+  List<StyleOption> _styles = [];
+  List<StyleOption> get styles => _styles;
+  bool _stylesLoading = false;
+  bool get stylesLoading => _stylesLoading;
+
+  int _selectedStyleIndex = 0;
+  int get selectedStyleIndex => _selectedStyleIndex;
+  StyleOption? get selectedStyle =>
+      _styles.isNotEmpty ? _styles[_selectedStyleIndex] : null;
+
+  void selectStyle(int index) {
+    _selectedStyleIndex = index;
+    notifyListeners();
+  }
+
+  /// Default icon + gradient mapping for known style names
+  static const Map<String, ({IconData icon, List<Color> gradient})>
+      _styleVisuals = {
+    'modern': (
+      icon: Icons.weekend_outlined,
+      gradient: [Color(0xFF667EEA), Color(0xFF764BA2)],
+    ),
+    'minimalist': (
+      icon: Icons.crop_square_rounded,
+      gradient: [Color(0xFF89F7FE), Color(0xFF66A6FF)],
+    ),
+    'industrial': (
+      icon: Icons.factory_outlined,
+      gradient: [Color(0xFFFC5C7D), Color(0xFF6A82FB)],
+    ),
+    'indochine': (
+      icon: Icons.temple_buddhist_outlined,
+      gradient: [Color(0xFFF5AF19), Color(0xFFF12711)],
+    ),
+    'scandinavian': (
+      icon: Icons.forest_outlined,
+      gradient: [Color(0xFF11998E), Color(0xFF38EF7D)],
+    ),
+  };
+
+  Future<void> loadStyles() async {
+    _stylesLoading = true;
+    notifyListeners();
+
+    try {
+      final rawStyles = await _dataSource.getStyles();
+      _styles = rawStyles.map((s) {
+        final name = (s['name'] as String?) ?? 'unknown';
+        final vis = _styleVisuals[name];
+        return StyleOption(
+          name: name,
+          displayName: (s['display_name'] as String?) ?? name,
+          description: (s['description'] as String?) ?? '',
+          icon: vis?.icon ?? Icons.auto_awesome,
+          gradient: vis?.gradient ?? const [Color(0xFF9D50BB), Color(0xFF6E48AA)],
+        );
+      }).toList();
+    } catch (e) {
+      // Fallback to hardcoded list so UI is never empty
+      _styles = _styleVisuals.entries.map((e) {
+        return StyleOption(
+          name: e.key,
+          displayName: e.key[0].toUpperCase() + e.key.substring(1),
+          description: '',
+          icon: e.value.icon,
+          gradient: e.value.gradient,
+        );
+      }).toList();
+    } finally {
+      _stylesLoading = false;
+      notifyListeners();
+    }
+  }
+
+  // ── Generation job ────────────────────────────────────────────────
+  bool _isGenerating = false;
+  bool get isGenerating => _isGenerating;
+
+  String? _jobId;
+  String? get jobId => _jobId;
+
+  String _jobStatus = '';
+  String get jobStatus => _jobStatus;
+
+  double _jobProgress = 0;
+  double get jobProgress => _jobProgress;
+
+  String? _resultImageUrl;
+  String? get resultImageUrl => _resultImageUrl;
+
+  String? _errorMessage;
+  String? get errorMessage => _errorMessage;
+
+  Timer? _pollingTimer;
+
+  /// Start a Generate Design job
+  Future<void> generateDesign() async {
+    if (_imageId == null || selectedStyle == null) return;
+
+    _isGenerating = true;
+    _jobStatus = 'Đang gửi yêu cầu...';
+    _jobProgress = 0.05;
+    _resultImageUrl = null;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final result = await _dataSource.generateDesign(
+        imageId: _imageId!,
+        style: selectedStyle!.name,
+      );
+      _jobId = result['job_id'] as String?;
+      _jobStatus = 'Đang xử lý trên cloud...';
+      _jobProgress = 0.15;
+      notifyListeners();
+
+      // Start polling
+      _startPolling(type: 'generation');
+    } catch (e) {
+      _isGenerating = false;
+      _errorMessage = e.toString().replaceFirst('Exception: ', '');
+      notifyListeners();
+    }
+  }
+
+  // ── Place furniture job ───────────────────────────────────────────
+  Rect? _boundingBox; // normalised 0..1
+  Rect? get boundingBox => _boundingBox;
+
+  String _furnitureDescription = '';
+  String get furnitureDescription => _furnitureDescription;
+
+  void setBoundingBox(Rect? box) {
+    _boundingBox = box;
+    notifyListeners();
+  }
+
+  void setFurnitureDescription(String desc) {
+    _furnitureDescription = desc;
+  }
+
+  Future<void> placeFurniture() async {
+    if (_imageId == null || _boundingBox == null || _furnitureDescription.trim().isEmpty) {
+      _errorMessage = 'Vui lòng vẽ vùng chọn và nhập mô tả đồ nội thất';
+      notifyListeners();
+      return;
+    }
+
+    _isGenerating = true;
+    _jobStatus = 'Đang gửi yêu cầu...';
+    _jobProgress = 0.05;
+    _resultImageUrl = null;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final result = await _dataSource.placeFurniture(
+        imageId: _imageId!,
+        x: _boundingBox!.left,
+        y: _boundingBox!.top,
+        w: _boundingBox!.width,
+        h: _boundingBox!.height,
+        description: _furnitureDescription.trim(),
+      );
+      _jobId = result['job_id'] as String?;
+      _jobStatus = 'Đang tạo nội thất...';
+      _jobProgress = 0.15;
+      notifyListeners();
+
+      _startPolling(type: 'placement');
+    } catch (e) {
+      _isGenerating = false;
+      _errorMessage = e.toString().replaceFirst('Exception: ', '');
+      notifyListeners();
+    }
+  }
+
+  // ── Polling ───────────────────────────────────────────────────────
+  void _startPolling({required String type}) {
+    _pollingTimer?.cancel();
+    _pollingTimer = Timer.periodic(const Duration(seconds: 3), (_) async {
+      if (_jobId == null) return;
+      try {
+        final status = await _dataSource.checkJobStatus(_jobId!, type: type);
+        final st = status['status'] as String?;
+
+        if (st == 'processing') {
+          _jobStatus = 'Đang xử lý AI...';
+          _jobProgress = 0.5;
+          notifyListeners();
+        } else if (st == 'completed') {
+          _stopPolling();
+          _jobStatus = 'Hoàn tất!';
+          _jobProgress = 1.0;
+
+          if (type == 'generation') {
+            final resultId = status['result_id'] as String?;
+            if (resultId != null) {
+              _resultImageUrl = _dataSource.getGenerationResultUrl(resultId);
+            } else {
+              _resultImageUrl = status['result_url'] as String?;
+            }
+          } else {
+            final meta = status['metadata'] as Map<String, dynamic>?;
+            final resultId = (meta?['result_id'] ?? status['result_id']) as String?;
+            if (resultId != null) {
+              _resultImageUrl = _dataSource.getPlacementResultUrl(resultId);
+            } else {
+              _resultImageUrl = status['result_url'] as String?;
+            }
+          }
+
+          _isGenerating = false;
+          notifyListeners();
+        } else if (st == 'failed') {
+          _stopPolling();
+          _isGenerating = false;
+          _errorMessage = status['error'] as String? ?? 'Lỗi không xác định';
+          _jobStatus = 'Thất bại';
+          notifyListeners();
+        }
+      } catch (e) {
+        // Don't stop polling on transient errors
+        debugPrint('Polling error: $e');
+      }
+    });
+  }
+
+  void _stopPolling() {
+    _pollingTimer?.cancel();
+    _pollingTimer = null;
+  }
+
+  /// Reset the whole generation state for a new run
+  void resetGeneration() {
+    _stopPolling();
+    _isGenerating = false;
+    _jobId = null;
+    _jobStatus = '';
+    _jobProgress = 0;
+    _resultImageUrl = null;
+    _errorMessage = null;
+    _boundingBox = null;
+    _furnitureDescription = '';
+    notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _stopPolling();
+    super.dispose();
+  }
+}

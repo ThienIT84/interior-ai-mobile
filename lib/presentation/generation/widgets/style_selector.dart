@@ -1,0 +1,116 @@
+import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+import '../../../core/constants/app_colors.dart';
+import '../providers/generation_provider.dart';
+
+/// Horizontal scrollable style gallery for the Generate Design tab.
+class StyleSelector extends StatelessWidget {
+  final List<StyleOption> styles;
+  final int selectedIndex;
+  final ValueChanged<int> onSelected;
+
+  const StyleSelector({
+    super.key,
+    required this.styles,
+    required this.selectedIndex,
+    required this.onSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (styles.isEmpty) {
+      return const SizedBox(
+        height: 100,
+        child: Center(
+          child: CircularProgressIndicator(color: AppColors.primary),
+        ),
+      );
+    }
+
+    return SizedBox(
+      height: 110,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        itemCount: styles.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 12),
+        itemBuilder: (context, index) {
+          final style = styles[index];
+          final isSelected = index == selectedIndex;
+          return _StyleCard(
+            style: style,
+            isSelected: isSelected,
+            onTap: () => onSelected(index),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _StyleCard extends StatelessWidget {
+  final StyleOption style;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _StyleCard({
+    required this.style,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeInOut,
+        width: 90,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: isSelected
+                ? style.gradient
+                : [AppColors.surfaceLight, AppColors.surface],
+          ),
+          border: Border.all(
+            color: isSelected ? Colors.white.withOpacity(0.6) : AppColors.glassBorder,
+            width: isSelected ? 2 : 1,
+          ),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: style.gradient.first.withOpacity(0.45),
+                    blurRadius: 12,
+                    spreadRadius: 1,
+                  )
+                ]
+              : [],
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              style.icon,
+              size: 30,
+              color: isSelected ? Colors.white : AppColors.textSecondary,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              style.displayName,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.montserrat(
+                fontSize: 11,
+                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                color: isSelected ? Colors.white : AppColors.textSecondary,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

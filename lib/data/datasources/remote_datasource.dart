@@ -134,6 +134,18 @@ class RemoteDataSource {
     throw Exception('Debug endpoint failed: ${response.statusCode}');
   }
 
+  /// Fetch available design styles from backend
+  Future<List<Map<String, dynamic>>> getStyles() async {
+    final uri = Uri.parse('$_baseUrl/api/v1/generation/styles');
+    final response = await http.get(uri).timeout(AppConfig.jobStatusTimeout);
+
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      return List<Map<String, dynamic>>.from(data['styles'] ?? []);
+    }
+    throw Exception('Failed to fetch styles: ${response.statusCode}');
+  }
+
   String getImageUrl(String imageId) => '$_baseUrl/api/v1/segmentation/image/$imageId';
   String getMaskUrl(String maskId) => '$_baseUrl/api/v1/segmentation/mask-image/$maskId';
   String getInpaintingResultUrl(String resultId) => '$_baseUrl/api/v1/inpainting/result/$resultId';

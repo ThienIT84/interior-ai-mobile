@@ -7,6 +7,7 @@ import 'package:flutter_spinkit/flutter_spinkit.dart';
 import '../../../core/constants/app_colors.dart';
 import '../providers/segmentation_provider.dart';
 import '../widgets/pulsing_point_marker.dart';
+import '../../generation/views/generation_view.dart';
 
 class SegmentationView extends StatefulWidget {
   final File imageFile;
@@ -522,6 +523,14 @@ class _SegmentationViewState extends State<SegmentationView> {
                       isDestructive: true,
                     ),
                     const SizedBox(width: 10),
+                    _buildToolButton(
+                      icon: Icons.auto_awesome,
+                      label: 'Design',
+                      onTap: provider.imageId != null
+                          ? () => _navigateToGeneration(provider)
+                          : null,
+                    ),
+                    const SizedBox(width: 10),
                     Expanded(
                       flex: 2,
                       child: _buildPrimaryAction(provider),
@@ -617,24 +626,24 @@ class _SegmentationViewState extends State<SegmentationView> {
     );
   }
 
+  void _navigateToGeneration(SegmentationProvider provider) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => GenerationView(
+          imageId: provider.imageId!,
+          imageUrl: provider.imageUrl,
+        ),
+      ),
+    );
+  }
+
   Widget _buildPrimaryAction(SegmentationProvider provider) {
     final bool canProceed = provider.hasMask;
 
     return GestureDetector(
       onTap: canProceed
-          ? () {
-              // Navigate to Inpainting screen
-              // For now, uses the old screen until Task 4 is built
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => _InpaintingPlaceholder(
-                    imageId: provider.imageId!,
-                    maskId: provider.maskId!,
-                  ),
-                ),
-              );
-            }
+          ? () => _navigateToGeneration(provider)
           : null,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 300),
@@ -667,7 +676,7 @@ class _SegmentationViewState extends State<SegmentationView> {
             ),
             const SizedBox(width: 8),
             Text(
-              canProceed ? 'REMOVE OBJECT' : 'SELECT FIRST',
+              canProceed ? 'GENERATE' : 'SELECT FIRST',
               style: GoogleFonts.montserrat(
                 color: canProceed ? Colors.white : AppColors.textDim,
                 fontSize: 14,
@@ -682,55 +691,3 @@ class _SegmentationViewState extends State<SegmentationView> {
   }
 }
 
-// ─── Placeholder until Task 4 is built ──────────
-
-class _InpaintingPlaceholder extends StatelessWidget {
-  final String imageId;
-  final String maskId;
-
-  const _InpaintingPlaceholder({
-    required this.imageId,
-    required this.maskId,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: Text(
-          'Processing',
-          style: GoogleFonts.montserrat(fontWeight: FontWeight.bold),
-        ),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-      ),
-      body: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.construction, color: AppColors.accent, size: 60),
-            const SizedBox(height: 20),
-            Text(
-              'Inpainting Screen\n(Coming in Task 4)',
-              textAlign: TextAlign.center,
-              style: GoogleFonts.montserrat(
-                color: AppColors.textSecondary,
-                fontSize: 16,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'Image: $imageId\nMask: $maskId',
-              textAlign: TextAlign.center,
-              style: GoogleFonts.montserrat(
-                color: AppColors.textDim,
-                fontSize: 12,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
