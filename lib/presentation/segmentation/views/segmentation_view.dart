@@ -8,7 +8,7 @@ import '../../../core/constants/app_colors.dart';
 import '../providers/segmentation_provider.dart';
 import '../widgets/pulsing_point_marker.dart';
 import '../../generation/views/generation_view.dart';
-import '../../../screens/inpainting_screen.dart';
+import '../../inpainting/views/inpainting_view.dart';
 
 class SegmentationView extends StatefulWidget {
   final File imageFile;
@@ -505,6 +505,7 @@ class _SegmentationViewState extends State<SegmentationView> {
                 if (provider.hasMask) _buildOpacitySlider(provider),
                 const SizedBox(height: 8),
                 // Action buttons row
+                // Action buttons row
                 Row(
                   children: [
                     _buildToolButton(
@@ -514,7 +515,7 @@ class _SegmentationViewState extends State<SegmentationView> {
                           ? provider.undoLastPoint
                           : null,
                     ),
-                    const SizedBox(width: 10),
+                    const SizedBox(width: 8),
                     _buildToolButton(
                       icon: Icons.delete_outline_rounded,
                       label: 'Clear',
@@ -523,7 +524,7 @@ class _SegmentationViewState extends State<SegmentationView> {
                           : null,
                       isDestructive: true,
                     ),
-                    const SizedBox(width: 10),
+                    const SizedBox(width: 8),
                     _buildToolButton(
                       icon: Icons.cleaning_services_rounded,
                       label: 'Remove',
@@ -531,7 +532,7 @@ class _SegmentationViewState extends State<SegmentationView> {
                           ? () => _navigateToInpainting(provider)
                           : null,
                     ),
-                    const SizedBox(width: 10),
+                    const SizedBox(width: 8),
                     _buildToolButton(
                       icon: Icons.auto_awesome,
                       label: 'Design',
@@ -539,13 +540,10 @@ class _SegmentationViewState extends State<SegmentationView> {
                           ? () => _navigateToGeneration(provider)
                           : null,
                     ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      flex: 2,
-                      child: _buildPrimaryAction(provider),
-                    ),
                   ],
                 ),
+                const SizedBox(height: 12),
+                _buildPrimaryAction(provider),
               ],
             ),
           ),
@@ -640,7 +638,7 @@ class _SegmentationViewState extends State<SegmentationView> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => InpaintingScreen(
+        builder: (_) => InpaintingView(
           imageId: provider.imageId!,
           maskId: provider.maskId!,
         ),

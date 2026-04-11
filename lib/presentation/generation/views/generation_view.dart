@@ -80,10 +80,10 @@ class _GenerationViewState extends State<GenerationView>
         body: SafeArea(
           child: Column(
             children: [
-              const SizedBox(height: 8),
+              const SizedBox(height: 4),
               // ─ Image area ──────────────────────────────────────
               Expanded(
-                flex: 5,
+                flex: 4, // Reduced from 5 to save vertical space
                 child: _buildImageArea(),
               ),
               // ─ Progress bar (visible during generation) ────────
@@ -94,7 +94,7 @@ class _GenerationViewState extends State<GenerationView>
               _buildTabBar(),
               // ─ Tab content ─────────────────────────────────────
               Expanded(
-                flex: 4,
+                flex: 6, // Increased to ensure controls fit without scrolling
                 child: TabBarView(
                   controller: _tabController,
                   children: [
@@ -103,6 +103,8 @@ class _GenerationViewState extends State<GenerationView>
                   ],
                 ),
               ),
+              // ─ Sticky Action Button ────────────────────────────
+              _buildStickyActionButton(),
             ],
           ),
         ),
@@ -132,7 +134,7 @@ class _GenerationViewState extends State<GenerationView>
         if (_provider.resultImageUrl != null)
           IconButton(
             icon: const Icon(Icons.refresh_rounded, color: AppColors.primary),
-            tooltip: 'Tạo lại',
+            tooltip: 'Regenerate',
             onPressed: () {
               _provider.resetGeneration();
             },
@@ -191,7 +193,7 @@ class _GenerationViewState extends State<GenerationView>
                   borderRadius: 20,
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
                   child: Text(
-                    '👆  Kéo để vẽ vùng đặt nội thất',
+                    '👆  Draw a box to place object',
                     style: GoogleFonts.montserrat(
                       fontSize: 12,
                       color: AppColors.textPrimary,
@@ -384,7 +386,7 @@ class _GenerationViewState extends State<GenerationView>
   // ── Tab bar ───────────────────────────────────────────────────
   Widget _buildTabBar() {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(14),
@@ -407,11 +409,11 @@ class _GenerationViewState extends State<GenerationView>
         tabs: const [
           Tab(
             icon: Icon(Icons.auto_awesome, size: 18),
-            text: 'Thiết kế',
+            text: 'Design',
           ),
           Tab(
             icon: Icon(Icons.chair_outlined, size: 18),
-            text: 'Nội thất',
+            text: 'Placement',
           ),
         ],
       ),
@@ -429,7 +431,7 @@ class _GenerationViewState extends State<GenerationView>
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Text(
-              'Chọn model AI',
+              'AI Model',
               style: GoogleFonts.montserrat(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
@@ -437,14 +439,14 @@ class _GenerationViewState extends State<GenerationView>
               ),
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           _buildModelSelector(),
-          const SizedBox(height: 16),
+          const SizedBox(height: 10),
           // ── Style selector ───────────────────────────────────────
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Text(
-              'Chọn phong cách thiết kế',
+              'Design Style',
               style: GoogleFonts.montserrat(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
@@ -452,14 +454,14 @@ class _GenerationViewState extends State<GenerationView>
               ),
             ),
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 6),
           StyleSelector(
             styles: _provider.styles,
             selectedIndex: _provider.selectedStyleIndex,
             onSelected: (i) => _provider.selectStyle(i),
           ),
           if (_provider.selectedStyle != null) ...[
-            const SizedBox(height: 10),
+            const SizedBox(height: 4),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Text(
@@ -467,13 +469,11 @@ class _GenerationViewState extends State<GenerationView>
                 style: GoogleFonts.montserrat(
                   fontSize: 12,
                   color: AppColors.textSecondary,
-                  height: 1.5,
+                  height: 1.4,
                 ),
               ),
             ),
           ],
-          const SizedBox(height: 16),
-          _buildGenerateButton(),
         ],
       ),
     );
@@ -497,7 +497,7 @@ class _GenerationViewState extends State<GenerationView>
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 250),
                   curve: Curves.easeInOut,
-                  padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
                   decoration: BoxDecoration(
                     color: isSelected
                         ? AppColors.primary.withOpacity(0.15)
@@ -563,7 +563,7 @@ class _GenerationViewState extends State<GenerationView>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Mô tả đồ nội thất',
+            'Object Description',
             style: GoogleFonts.montserrat(
               fontSize: 14,
               fontWeight: FontWeight.w600,
@@ -586,7 +586,7 @@ class _GenerationViewState extends State<GenerationView>
                 color: AppColors.textPrimary,
               ),
               decoration: InputDecoration(
-                hintText: 'VD: Sofa da nâu phong cách hiện đại',
+                hintText: 'e.g., Modern brown leather sofa',
                 hintStyle: GoogleFonts.montserrat(
                   fontSize: 13,
                   color: AppColors.textDim,
@@ -603,17 +603,34 @@ class _GenerationViewState extends State<GenerationView>
             spacing: 8,
             runSpacing: 8,
             children: [
-              _quickSuggestion('Sofa da nâu'),
-              _quickSuggestion('Bàn gỗ sồi'),
-              _quickSuggestion('Kệ tivi mdf'),
-              _quickSuggestion('Giường ngủ'),
-              _quickSuggestion('Tủ quần áo'),
+              _quickSuggestion('Leather Sofa'),
+              _quickSuggestion('Oak Coffee Table'),
+              _quickSuggestion('MDF TV Stand'),
+              _quickSuggestion('King Bed'),
+              _quickSuggestion('Wardrobe'),
             ],
           ),
-          const SizedBox(height: 16),
-          _buildPlaceButton(),
         ],
       ),
+    );
+  }
+
+  Widget _buildStickyActionButton() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 6, 20, 12),
+      decoration: BoxDecoration(
+        color: AppColors.background.withOpacity(0.8),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.2),
+            blurRadius: 10,
+            offset: const Offset(0, -2),
+          ),
+        ],
+      ),
+      child: _provider.mode == GenerationMode.design
+          ? _buildGenerateButton()
+          : _buildPlaceButton(),
     );
   }
 
@@ -656,7 +673,7 @@ class _GenerationViewState extends State<GenerationView>
                       strokeWidth: 2, color: Colors.black))
               : const Icon(Icons.auto_awesome, size: 20),
           label: Text(
-            _provider.isGenerating ? 'Đang tạo...' : 'Generate Design',
+            _provider.isGenerating ? 'Generating...' : 'Generate Design',
             style: GoogleFonts.montserrat(fontWeight: FontWeight.w700, fontSize: 15),
           ),
           style: ElevatedButton.styleFrom(
@@ -688,7 +705,7 @@ class _GenerationViewState extends State<GenerationView>
                 child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
             : const Icon(Icons.add_home_work_outlined, size: 20),
         label: Text(
-          _provider.isGenerating ? 'Đang tạo...' : 'Place Furniture',
+          _provider.isGenerating ? 'Generating...' : 'Place Object',
           style: GoogleFonts.montserrat(fontWeight: FontWeight.w700, fontSize: 15),
         ),
         style: ElevatedButton.styleFrom(

@@ -50,13 +50,13 @@ class GenerationProvider with ChangeNotifier {
     ModelOption(
       id: 'controlnet',
       displayName: 'Standard',
-      subtitle: 'Nhanh, tiết kiệm',
+      subtitle: 'Fast & Efficient',
       icon: Icons.flash_on_rounded,
     ),
     ModelOption(
       id: 'flux-pro',
       displayName: 'Professional',
-      subtitle: 'Chất lượng cao',
+      subtitle: 'Ultra High Quality',
       icon: Icons.auto_awesome,
     ),
   ];
@@ -135,6 +135,64 @@ class GenerationProvider with ChangeNotifier {
     ),
   };
 
+  /// Localization overrides for backend styles
+  static const Map<String, ({String displayName, String description})>
+      _styleLocalization = {
+    'modern': (
+      displayName: 'Modern',
+      description: 'Clean lines and a polished look for a contemporary space.',
+    ),
+    'modern_vn': (
+      displayName: 'Modern',
+      description: 'Clean lines and a polished look for a contemporary space.',
+    ),
+    'minimalist': (
+      displayName: 'Minimalist',
+      description: 'Focus on simplicity and functionality with minimal clutter.',
+    ),
+    'industrial': (
+      displayName: 'Industrial',
+      description: 'Raw materials and an edgy, warehouse-inspired aesthetic.',
+    ),
+    'indochine': (
+      displayName: 'Indochine',
+      description: 'A fusion of French colonial charm and Oriental traditions.',
+    ),
+    'scandinavian': (
+      displayName: 'Scandinavian',
+      description: 'Bright, airy, and warm with natural wood and soft textures.',
+    ),
+    // Vietnamese aliases to catch backend strings
+    'hiện đại': (
+      displayName: 'Modern',
+      description: 'Clean lines and a polished look for a contemporary space.',
+    ),
+    'phong cách hiện đại': (
+      displayName: 'Modern',
+      description: 'Clean lines and a polished look for a contemporary space.',
+    ),
+    'tối giản': (
+      displayName: 'Minimalist',
+      description: 'Focus on simplicity and functionality with minimal clutter.',
+    ),
+    'phong cách tối giản': (
+      displayName: 'Minimalist',
+      description: 'Focus on simplicity and functionality with minimal clutter.',
+    ),
+    'công nghiệp': (
+      displayName: 'Industrial',
+      description: 'Raw materials and an edgy, warehouse-inspired aesthetic.',
+    ),
+    'đông dương': (
+      displayName: 'Indochine',
+      description: 'A fusion of French colonial charm and Oriental traditions.',
+    ),
+    'bắc âu': (
+      displayName: 'Scandinavian',
+      description: 'Bright, airy, and warm with natural wood and soft textures.',
+    ),
+  };
+
   Future<void> loadStyles() async {
     _stylesLoading = true;
     notifyListeners();
@@ -142,12 +200,23 @@ class GenerationProvider with ChangeNotifier {
     try {
       final rawStyles = await _dataSource.getStyles();
       _styles = rawStyles.map((s) {
-        final name = (s['name'] as String?) ?? 'unknown';
-        final vis = _styleVisuals[name];
+        String name = (s['name'] as String?)?.toLowerCase() ?? 'unknown';
+        
+        // Match visualization (using English key if possible)
+        String visualKey = name;
+        if (name.contains('modern') || name.contains('hiện đại')) visualKey = 'modern';
+        if (name.contains('minimalist') || name.contains('tối giản')) visualKey = 'minimalist';
+        if (name.contains('industrial') || name.contains('công nghiệp')) visualKey = 'industrial';
+        if (name.contains('indochine') || name.contains('đông dương')) visualKey = 'indochine';
+        if (name.contains('scandinavian') || name.contains('bắc âu')) visualKey = 'scandinavian';
+
+        final vis = _styleVisuals[visualKey];
+        final loc = _styleLocalization[name] ?? _styleLocalization[visualKey];
+        
         return StyleOption(
           name: name,
-          displayName: (s['display_name'] as String?) ?? name,
-          description: (s['description'] as String?) ?? '',
+          displayName: loc?.displayName ?? (s['display_name'] as String?) ?? name,
+          description: loc?.description ?? (s['description'] as String?) ?? '',
           icon: vis?.icon ?? Icons.auto_awesome,
           gradient: vis?.gradient ?? const [Color(0xFF9D50BB), Color(0xFF6E48AA)],
         );
@@ -155,10 +224,11 @@ class GenerationProvider with ChangeNotifier {
     } catch (e) {
       // Fallback to hardcoded list so UI is never empty
       _styles = _styleVisuals.entries.map((e) {
+        final loc = _styleLocalization[e.key];
         return StyleOption(
           name: e.key,
-          displayName: e.key[0].toUpperCase() + e.key.substring(1),
-          description: '',
+          displayName: loc?.displayName ?? (e.key[0].toUpperCase() + e.key.substring(1)),
+          description: loc?.description ?? '',
           icon: e.value.icon,
           gradient: e.value.gradient,
         );
@@ -195,7 +265,7 @@ class GenerationProvider with ChangeNotifier {
     if (_imageId == null || selectedStyle == null) return;
 
     _isGenerating = true;
-    _jobStatus = 'Đang gửi yêu cầu...';
+    _jobStatus = 'Sending request...';
     _jobProgress = 0.05;
     _resultImageUrl = null;
     _errorMessage = null;
@@ -208,7 +278,7 @@ class GenerationProvider with ChangeNotifier {
         modelId: _selectedModelId,
       );
       _jobId = result['job_id'] as String?;
-      _jobStatus = 'Đang xử lý trên cloud...';
+      _jobStatus = 'Processing on Cloud...';
       _jobProgress = 0.15;
       notifyListeners();
 
@@ -239,13 +309,13 @@ class GenerationProvider with ChangeNotifier {
 
   Future<void> placeFurniture() async {
     if (_imageId == null || _boundingBox == null || _furnitureDescription.trim().isEmpty) {
-      _errorMessage = 'Vui lòng vẽ vùng chọn và nhập mô tả đồ nội thất';
+      _errorMessage = 'Please draw a selection and input object description';
       notifyListeners();
       return;
     }
 
     _isGenerating = true;
-    _jobStatus = 'Đang gửi yêu cầu...';
+    _jobStatus = 'Sending request...';
     _jobProgress = 0.05;
     _resultImageUrl = null;
     _errorMessage = null;
@@ -261,7 +331,7 @@ class GenerationProvider with ChangeNotifier {
         description: _furnitureDescription.trim(),
       );
       _jobId = result['job_id'] as String?;
-      _jobStatus = 'Đang tạo nội thất...';
+      _jobStatus = 'Creating furniture...';
       _jobProgress = 0.15;
       notifyListeners();
 
@@ -283,13 +353,14 @@ class GenerationProvider with ChangeNotifier {
         final st = status['status'] as String?;
 
         if (st == 'processing') {
-          _jobStatus = 'Đang xử lý AI...';
+          _jobStatus = 'AI Processing...';
           _jobProgress = 0.5;
           notifyListeners();
         } else if (st == 'completed') {
           _stopPolling();
-          _jobStatus = 'Hoàn tất!';
+          _jobStatus = 'Complete!';
           _jobProgress = 1.0;
+
 
           if (type == 'generation') {
             final resultId = status['result_id'] as String?;
@@ -313,8 +384,8 @@ class GenerationProvider with ChangeNotifier {
         } else if (st == 'failed') {
           _stopPolling();
           _isGenerating = false;
-          _errorMessage = status['error'] as String? ?? 'Lỗi không xác định';
-          _jobStatus = 'Thất bại';
+          _errorMessage = status['error'] as String? ?? 'Unknown error';
+          _jobStatus = 'Failed';
           notifyListeners();
         }
       } catch (e) {

@@ -28,12 +28,12 @@ class StyleSelector extends StatelessWidget {
     }
 
     return SizedBox(
-      height: 110,
+      height: 88, // Reduced from 95
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 16),
         itemCount: styles.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 12),
+        separatorBuilder: (_, __) => const SizedBox(width: 8), // Reduced from 10
         itemBuilder: (context, index) {
           final style = styles[index];
           final isSelected = index == selectedIndex;
@@ -66,9 +66,9 @@ class _StyleCard extends StatelessWidget {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 250),
         curve: Curves.easeInOut,
-        width: 90,
+        width: 75, // Reduced from 80
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(14), // Slightly smaller radius
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
@@ -78,14 +78,14 @@ class _StyleCard extends StatelessWidget {
           ),
           border: Border.all(
             color: isSelected ? Colors.white.withOpacity(0.6) : AppColors.glassBorder,
-            width: isSelected ? 2 : 1,
+            width: isSelected ? 1.5 : 1,
           ),
           boxShadow: isSelected
               ? [
                   BoxShadow(
-                    color: style.gradient.first.withOpacity(0.45),
-                    blurRadius: 12,
-                    spreadRadius: 1,
+                    color: style.gradient.first.withOpacity(0.4),
+                    blurRadius: 10,
+                    spreadRadius: 0,
                   )
                 ]
               : [],
@@ -95,15 +95,17 @@ class _StyleCard extends StatelessWidget {
           children: [
             Icon(
               style.icon,
-              size: 30,
+              size: 24, // Reduced from 30
               color: isSelected ? Colors.white : AppColors.textSecondary,
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 6), // Reduced spacing
             Text(
               style.displayName,
               textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: GoogleFonts.montserrat(
-                fontSize: 11,
+                fontSize: 10, // Reduced from 11
                 fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
                 color: isSelected ? Colors.white : AppColors.textSecondary,
               ),

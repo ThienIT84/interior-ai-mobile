@@ -7,7 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:gal/gal.dart';
 import 'package:share_plus/share_plus.dart';
 import '../services/api_service.dart';
-import 'generation_screen.dart';
+import '../presentation/generation/views/generation_view.dart';
 
 /// Screen to display inpainting progress and result
 class InpaintingScreen extends StatefulWidget {
@@ -735,9 +735,9 @@ class _InpaintingScreenState extends State<InpaintingScreen> {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (_) => GenerationScreen(
-                              inpaintedImageId: resultId,
-                              originalImageId: widget.imageId,
+                            builder: (_) => GenerationView(
+                              imageId: resultId,
+                              imageUrl: _apiService.getResultUrl(resultId),
                             ),
                           ),
                         );
