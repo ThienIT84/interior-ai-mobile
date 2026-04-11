@@ -110,12 +110,17 @@ class RemoteDataSource {
   Future<Map<String, dynamic>> generateDesign({
     required String imageId,
     required String style,
+    String? modelId,
   }) async {
     final uri = Uri.parse('$_baseUrl/api/v1/generation/generate-design');
     final response = await http.post(
       uri,
       headers: {'Content-Type': 'application/json'},
-      body: json.encode({'image_id': imageId, 'style': style}),
+      body: json.encode({
+        'image_id': imageId,
+        'style': style,
+        if (modelId != null) 'model_id': modelId,
+      }),
     ).timeout(AppConfig.receiveTimeout);
 
     if (response.statusCode == 200) {

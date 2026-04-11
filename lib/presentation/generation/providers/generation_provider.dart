@@ -22,6 +22,21 @@ class StyleOption {
   });
 }
 
+/// Represents an AI model option
+class ModelOption {
+  final String id;
+  final String displayName;
+  final String subtitle;
+  final IconData icon;
+
+  const ModelOption({
+    required this.id,
+    required this.displayName,
+    required this.subtitle,
+    required this.icon,
+  });
+}
+
 /// Provider managing state for the Generation screen.
 ///
 /// Handles two workflows:
@@ -29,6 +44,33 @@ class StyleOption {
 ///   2. Place Furniture – inpaints an object inside a user-drawn bbox
 class GenerationProvider with ChangeNotifier {
   final RemoteDataSource _dataSource = RemoteDataSource();
+
+  // ── Available AI models ───────────────────────────────────────────
+  static const List<ModelOption> modelOptions = [
+    ModelOption(
+      id: 'controlnet',
+      displayName: 'Standard',
+      subtitle: 'Nhanh, tiết kiệm',
+      icon: Icons.flash_on_rounded,
+    ),
+    ModelOption(
+      id: 'flux-pro',
+      displayName: 'Professional',
+      subtitle: 'Chất lượng cao',
+      icon: Icons.auto_awesome,
+    ),
+  ];
+
+  // ── Selected model ────────────────────────────────────────────────
+  String _selectedModelId = 'controlnet';
+  String get selectedModelId => _selectedModelId;
+  ModelOption get selectedModel =>
+      modelOptions.firstWhere((m) => m.id == _selectedModelId);
+
+  void selectModel(String modelId) {
+    _selectedModelId = modelId;
+    notifyListeners();
+  }
 
   // ── Current mode ──────────────────────────────────────────────────
   GenerationMode _mode = GenerationMode.design;
@@ -163,6 +205,7 @@ class GenerationProvider with ChangeNotifier {
       final result = await _dataSource.generateDesign(
         imageId: _imageId!,
         style: selectedStyle!.name,
+        modelId: _selectedModelId,
       );
       _jobId = result['job_id'] as String?;
       _jobStatus = 'Đang xử lý trên cloud...';
