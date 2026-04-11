@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 
 import 'core/theme/app_theme.dart';
 import 'core/providers/base_provider.dart';
+import 'presentation/home/providers/home_provider.dart';
 
 import 'presentation/home/views/home_view.dart';
 

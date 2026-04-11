@@ -124,6 +124,16 @@ class RemoteDataSource {
     throw Exception('Design generation failed');
   }
 
+  Future<Map<String, dynamic>> getSegmentationBackendDebug() async {
+    final uri = Uri.parse('$_baseUrl/api/v1/segmentation/debug/backend');
+    final response = await http.get(uri).timeout(const Duration(seconds: 10));
+
+    if (response.statusCode == 200) {
+      return json.decode(response.body);
+    }
+    throw Exception('Debug endpoint failed: ${response.statusCode}');
+  }
+
   String getImageUrl(String imageId) => '$_baseUrl/api/v1/segmentation/image/$imageId';
   String getMaskUrl(String maskId) => '$_baseUrl/api/v1/segmentation/mask-image/$maskId';
   String getInpaintingResultUrl(String resultId) => '$_baseUrl/api/v1/inpainting/result/$resultId';

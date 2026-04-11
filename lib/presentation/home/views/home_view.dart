@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:animate_do/animate_do.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
-import '../../../core/theme/app_colors.dart';
+import '../../../core/constants/app_colors.dart';
 import '../../../core/widgets/glass_container.dart';
 import '../providers/home_provider.dart';
 import '../../segmentation/views/segmentation_view.dart';
@@ -21,6 +21,9 @@ class HomeView extends StatelessWidget {
             child: Image.network(
               'https://images.unsplash.com/photo-1618221195710-dd6b41faeaa6?q=80&w=2000&auto=format&fit=crop',
               fit: BoxFit.cover,
+              errorBuilder: (context, error, stackTrace) {
+                return Container(color: AppColors.background);
+              },
             ),
           ),
           // Dark Gradient Overlay
@@ -128,7 +131,9 @@ class HomeView extends StatelessWidget {
                                     Navigator.push(
                                       context,
                                       MaterialPageRoute(
-                                        builder: (context) => const SegmentationView(),
+                                        builder: (context) => SegmentationView(
+                                          imageFile: provider.selectedImage!,
+                                        ),
                                       ),
                                     );
                                   },
@@ -167,7 +172,7 @@ class HomeView extends StatelessWidget {
               if (provider.isLoading) {
                 return Container(
                   color: Colors.black54,
-                  child: const Center(
+                  child: Center(
                     child: CircularProgressIndicator(color: AppColors.accent),
                   ),
                 );
