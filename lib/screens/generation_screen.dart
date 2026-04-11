@@ -89,6 +89,31 @@ class _GenerationScreenState extends State<GenerationScreen> {
   int _elapsedSeconds = 0;
   bool _isProcessing = false;
 
+  // Premium Loading State
+  int _currentTipIndex = 0;
+  Timer? _tipTimer;
+  final List<String> _loadingTips = [
+    "Ánh sáng tự nhiên làm nổi bật các đường nét nội thất.",
+    "Bạn có biết? Gương có thể làm không gian nhỏ rộng hơn 2 lần.",
+    "Màu trung tính giúp tạo cảm giác thư giãn và sang trọng.",
+    "Cây xanh không chỉ trang trí mà còn lọc không khí rất tốt.",
+    "Sắp xếp đồ theo nguyên tắc 3 vật dụng giúp tạo điểm nhấn cân bằng.",
+    "AI đang phân tích cấu trúc phòng để giữ nguyên khung cửa.",
+    "Chúng tôi đang áp dụng các vật liệu thực tế nhất cho thiết kế của bạn."
+  ];
+
+  void _startTipTimer() {
+    _tipTimer?.cancel();
+    _currentTipIndex = Random().nextInt(_loadingTips.length);
+    _tipTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+      if (mounted) {
+        setState(() {
+          _currentTipIndex = (_currentTipIndex + 1) % _loadingTips.length;
+        });
+      }
+    });
+  }
+
   // Option 1 – Placement
   final TextEditingController _furnitureCtrl = TextEditingController();
   Offset? _bboxStart;
@@ -170,6 +195,7 @@ class _GenerationScreenState extends State<GenerationScreen> {
   void _resetJobState() {
     _pollTimer?.cancel();
     _timeTimer?.cancel();
+    _tipTimer?.cancel();
     setState(() {
       _jobState = _JobState.idle;
       _status = '';
@@ -264,6 +290,10 @@ class _GenerationScreenState extends State<GenerationScreen> {
         }
         try {
           final s = await _apiService.checkPlacementJobStatus(jobId);
+          // Extract message from metadata if present
+          if (s['metadata'] != null && s['metadata']['status_message'] != null) {
+            _status = s['metadata']['status_message'];
+          }
           _handlePlacementStatus(s);
         } catch (_) {}
       });
@@ -288,13 +318,17 @@ class _GenerationScreenState extends State<GenerationScreen> {
         break;
       case 'processing':
         setState(() {
-          _status = 'Đang tạo đồ nội thất...';
+          // Status message usually comes from metadata now, but this is a fallback
+          if (_status.isEmpty || _status == 'Submitting job...') {
+            _status = 'Đang tạo đồ nội thất...';
+          }
           _progress = 0.65;
         });
         break;
       case 'completed':
         _pollTimer?.cancel();
         _timeTimer?.cancel();
+        _tipTimer?.cancel();
         final resultId = data['result_id'] as String?;
         if (resultId != null) {
           setState(() {
@@ -307,6 +341,7 @@ class _GenerationScreenState extends State<GenerationScreen> {
       case 'failed':
         _pollTimer?.cancel();
         _timeTimer?.cancel();
+        _tipTimer?.cancel();
         setState(() {
           _error = data['error'] as String? ?? 'Placement failed';
           _isProcessing = false;
@@ -351,6 +386,10 @@ class _GenerationScreenState extends State<GenerationScreen> {
         }
         try {
           final s = await _apiService.checkGenerationJobStatus(jobId);
+          // Extract message from metadata if present
+          if (s['metadata'] != null && s['metadata']['status_message'] != null) {
+            _status = s['metadata']['status_message'];
+          }
           _handleGenerationStatus(s, style);
         } catch (_) {}
       });
@@ -375,13 +414,16 @@ class _GenerationScreenState extends State<GenerationScreen> {
         break;
       case 'processing':
         setState(() {
-          _status = 'Đang tạo thiết kế ${style.displayName}...';
+          if (_status.isEmpty || _status == 'Submitting job...') {
+             _status = 'Đang tạo thiết kế ${style.displayName}...';
+          }
           _progress = 0.6;
         });
         break;
       case 'completed':
         _pollTimer?.cancel();
         _timeTimer?.cancel();
+        _tipTimer?.cancel();
         final resultId = data['result_id'] as String?;
         final t = (data['processing_time'] as num?)?.toInt() ?? _elapsedSeconds;
         if (resultId != null) {
@@ -411,6 +453,7 @@ class _GenerationScreenState extends State<GenerationScreen> {
       case 'failed':
         _pollTimer?.cancel();
         _timeTimer?.cancel();
+        _tipTimer?.cancel();
         setState(() {
           _error = data['error'] as String? ?? 'Generation failed';
           _isProcessing = false;
@@ -988,70 +1031,292 @@ class _GenerationScreenState extends State<GenerationScreen> {
 
   Widget _buildGenerating(
       {required String title, required String subtitle}) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
+    // Current step logic based on progress
+    int currentStep = 0;
+    if (_progress >= 0.1) currentStep = 1; // Preparation
+    if (_progress >= 0.3) currentStep = 2; // AI Processing
+    if (_progress >= 0.9) currentStep = 3; // Finalizing
+
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Colors.deepPurple.shade50,
+            Colors.white,
+          ],
+        ),
+      ),
+      child: Stack(
+        children: [
+          // Background abstract shape
+          Positioned(
+            top: -100,
+            right: -100,
+            child: Container(
+              width: 300,
+              height: 300,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.deepPurple.withOpacity(0.05),
+              ),
+            ),
+          ),
+          
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Column(
+                children: [
+                  const SizedBox(height: 40),
+                  Text(title.toUpperCase(),
+                      style: const TextStyle(
+                          fontSize: 14,
+                          letterSpacing: 2,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.deepPurple)),
+                  const SizedBox(height: 8),
+                  Text(subtitle,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                          fontSize: 18, 
+                          fontWeight: FontWeight.w500,
+                          color: Colors.grey[800])),
+                  
+                  const Spacer(),
+                  
+                  // Central Pulsing Progress
+                  _buildPulsingProgress(),
+                  
+                  const SizedBox(height: 60),
+                  
+                  // Step Tracker
+                  _buildStepTracker(currentStep),
+                  
+                  const Spacer(),
+                  
+                  // Loading Tips Card (Glassmorphism inspired)
+                  _buildTipsCard(),
+                  
+                  const SizedBox(height: 30),
+                  
+                  // Cancel Button
+                  _buildCancelButton(),
+                  const SizedBox(height: 20),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPulsingProgress() {
+    return SizedBox(
+      width: 140,
+      height: 140,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          // Outer pulse ring (simulation)
+          TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0.8, end: 1.2),
+            duration: const Duration(seconds: 2),
+            curve: Curves.easeInOutSine,
+            builder: (context, value, child) {
+              return Container(
+                width: 130 * value,
+                height: 130 * value,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: Colors.deepPurple.withOpacity(0.1),
+                    width: 2,
+                  ),
+                ),
+              );
+            },
+            onEnd: () {}, // Handled by library usually, but here just for logic
+          ),
+          
+          CircularProgressIndicator(
+            value: _progress > 0 ? _progress : null,
+            strokeWidth: 6,
+            valueColor: const AlwaysStoppedAnimation(Colors.deepPurple),
+            backgroundColor: Colors.deepPurple.withOpacity(0.1),
+          ),
+          
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(_fmt(_elapsedSeconds),
+                  style: const TextStyle(
+                      fontSize: 24,
+                      fontFamily: 'Courier',
+                      fontWeight: FontWeight.w900,
+                      color: Colors.deepPurple)),
+              Text("${(_progress * 100).toInt()}%",
+                  style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.deepPurple.withOpacity(0.6))),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStepTracker(int currentStep) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Row(
+        children: [
+          _stepItem(1, "Chuẩn bị", currentStep >= 1),
+          _stepLine(currentStep > 1),
+          _stepItem(2, "AI Thiết kế", currentStep >= 2),
+          _stepLine(currentStep > 2),
+          _stepItem(3, "Hoàn thiện", currentStep >= 3),
+        ],
+      ),
+    );
+  }
+
+  Widget _stepItem(int index, String label, bool isActive) {
+    return Column(
+      children: [
+        Container(
+          width: 32,
+          height: 32,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: isActive ? Colors.deepPurple : Colors.grey[200],
+            border: isActive ? null : Border.all(color: Colors.grey[300]!),
+          ),
+          child: Center(
+            child: isActive && index < 3 && _progress > 0.9 // If all steps mostly done
+                ? const Icon(Icons.check, color: Colors.white, size: 16)
+                : Text("$index", 
+                    style: TextStyle(
+                      color: isActive ? Colors.white : Colors.grey,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13
+                    )
+                ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(label, 
+            style: TextStyle(
+              fontSize: 10, 
+              fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+              color: isActive ? Colors.deepPurple : Colors.grey
+            )
+        ),
+      ],
+    );
+  }
+
+  Widget _stepLine(bool isPassed) {
+    return Expanded(
+      child: Container(
+        height: 2,
+        margin: const EdgeInsets.only(bottom: 24),
+        color: isPassed ? Colors.deepPurple : Colors.grey[200],
+      ),
+    );
+  }
+
+  Widget _buildTipsCard() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.7),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.deepPurple.withOpacity(0.1)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.deepPurple.withOpacity(0.05),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          )
+        ],
+      ),
+      child: Column(
+        children: [
+          Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text(title,
-                  style: const TextStyle(
-                      fontSize: 26,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.deepPurple)),
-              const SizedBox(height: 4),
-              Text(subtitle,
-                  style: const TextStyle(
-                      fontSize: 14, color: Colors.grey)),
-              const SizedBox(height: 44),
-              SizedBox(
-                width: 110,
-                height: 110,
-                child: Stack(alignment: Alignment.center, children: [
-                  CircularProgressIndicator(
-                    value: _progress > 0 ? _progress : null,
-                    strokeWidth: 8,
-                    valueColor: const AlwaysStoppedAnimation(
-                        Colors.deepPurple),
-                    backgroundColor:
-                        Colors.deepPurple.withOpacity(0.1),
-                  ),
-                  Text(_fmt(_elapsedSeconds),
-                      style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.deepPurple)),
-                ]),
+              const Icon(Icons.lightbulb_outline, color: Colors.orange, size: 18),
+              const SizedBox(width: 8),
+              Text("MẸO THIẾT KẾ", 
+                  style: TextStyle(
+                    fontSize: 11, 
+                    fontWeight: FontWeight.w800, 
+                    color: Colors.grey[600],
+                    letterSpacing: 1.2
+                  )),
+            ],
+          ),
+          const SizedBox(height: 12),
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 500),
+            child: Text(
+              _loadingTips[_currentTipIndex],
+              key: ValueKey<int>(_currentTipIndex),
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 14,
+                fontStyle: FontStyle.italic,
+                color: Colors.grey[800],
+                height: 1.4,
               ),
-              const SizedBox(height: 28),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 20, vertical: 10),
-                decoration: BoxDecoration(
-                    color: Colors.deepPurple.withOpacity(0.07),
-                    borderRadius: BorderRadius.circular(20)),
-                child: Text(_status,
-                    style: const TextStyle(
-                        fontSize: 14, color: Colors.deepPurple),
-                    textAlign: TextAlign.center),
+            ),
+          ),
+          const SizedBox(height: 16),
+          // Current precise status
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: Colors.deepPurple.withOpacity(0.05),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Text(
+              _status,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Colors.deepPurple,
               ),
-              const SizedBox(height: 36),
-              TextButton.icon(
-                onPressed: () {
-                  _pollTimer?.cancel();
-                  _timeTimer?.cancel();
-                  setState(() {
-                    _isProcessing = false;
-                    _jobState = _JobState.idle;
-                    _error = null;
-                  });
-                },
-                icon: const Icon(Icons.cancel_outlined,
-                    color: Colors.grey),
-                label: const Text('Cancel',
-                    style: TextStyle(color: Colors.grey)),
-              ),
-            ]),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCancelButton() {
+    return TextButton(
+      onPressed: () {
+        _pollTimer?.cancel();
+        _timeTimer?.cancel();
+        _tipTimer?.cancel();
+        setState(() {
+          _isProcessing = false;
+          _jobState = _JobState.idle;
+          _error = null;
+        });
+      },
+      child: Text(
+        "Hủy quá trình",
+        style: TextStyle(
+          color: Colors.grey[500],
+          fontSize: 14,
+          decoration: TextDecoration.underline,
+        ),
       ),
     );
   }

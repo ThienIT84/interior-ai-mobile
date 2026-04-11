@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
 import 'dart:io';
+import 'dart:math';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:gal/gal.dart';
@@ -42,12 +43,14 @@ class _InpaintingScreenState extends State<InpaintingScreen> {
     super.initState();
     _startInpainting();
     _startTimeCounter();
+    _startTipTimer();
   }
 
   @override
   void dispose() {
     _pollTimer?.cancel();
     _timeTimer?.cancel();
+    _tipTimer?.cancel();
     super.dispose();
   }
 
@@ -131,17 +134,18 @@ class _InpaintingScreenState extends State<InpaintingScreen> {
           
           if (status['status'] == 'completed') {
             _isProcessing = false;
+            _tipTimer?.cancel();
             _resultUrl = status['result_url'];
             timer.cancel();
           } else if (status['status'] == 'failed') {
             _isProcessing = false;
+            _tipTimer?.cancel();
             _error = status['error'] ?? 'Unknown error';
             timer.cancel();
           }
         });
       } catch (e) {
         // Continue polling on temporary errors
-        print('Polling error (attempt $pollCount/$maxPolls): $e');
         // Don't show error to user, just keep polling
         // Backend might be busy processing
       }
@@ -392,118 +396,209 @@ class _InpaintingScreenState extends State<InpaintingScreen> {
     );
   }
 
+  // ── Premium UI ─────────────────────────────────────────────────────────────
+  
+  int _currentTipIndex = 0;
+  Timer? _tipTimer;
+  final List<String> _loadingTips = [
+    "Việc xóa vật thể giúp AI hiểu rõ cấu trúc phòng hơn.",
+    "Chọn vùng sát vật thể để kết quả xóa tự nhiên nhất.",
+    "Bề mặt phẳng (sàn, tường) là nơi AI hoạt động tốt nhất.",
+    "Mẹo: Xóa bớt đồ cũ trước khi thiết kế mới giúp AI sáng tạo hơn.",
+    "Đang phân tích các điểm ảnh xung quanh để bù đắp vùng trống.",
+    "AI đang tái tạo lại vân gỗ và hoa văn tường một cách liền mạch.",
+    "Phòng trống là bước đệm hoàn hảo cho một thiết kế đột phá."
+  ];
+
+  void _startTipTimer() {
+    _tipTimer?.cancel();
+    _currentTipIndex = Random().nextInt(_loadingTips.length);
+    _tipTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+      if (mounted && _isProcessing) {
+        setState(() {
+          _currentTipIndex = (_currentTipIndex + 1) % _loadingTips.length;
+        });
+      }
+    });
+  }
+
   Widget _buildProcessing() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            // Animated icon
-            TweenAnimationBuilder(
-              tween: Tween<double>(begin: 0, end: 1),
-              duration: const Duration(seconds: 2),
-              builder: (context, double value, child) {
-                return Transform.scale(
-                  scale: 0.8 + (value * 0.2),
-                  child: const Icon(
-                    Icons.auto_fix_high,
-                    size: 80,
-                    color: Colors.deepPurple,
-                  ),
-                );
-              },
-              onEnd: () {
-                // Loop animation
-                if (mounted && _isProcessing) {
-                  setState(() {});
-                }
-              },
-            ),
-            
-            const SizedBox(height: 32),
-            
-            // Status text
-            Text(
-              _status,
-              style: const TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            
-            const SizedBox(height: 16),
-            
-            // Progress bar
-            SizedBox(
-              width: 250,
-              child: LinearProgressIndicator(
-                value: _progress,
-                backgroundColor: Colors.grey[300],
-                valueColor: const AlwaysStoppedAnimation<Color>(Colors.deepPurple),
-                minHeight: 8,
-              ),
-            ),
-            
-            const SizedBox(height: 8),
-            
-            Text(
-              '${(_progress * 100).toInt()}%',
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.grey[600],
-              ),
-            ),
-            
-            const SizedBox(height: 24),
-            
-            // Time elapsed
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              decoration: BoxDecoration(
-                color: Colors.grey[200],
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.timer, size: 20),
-                  const SizedBox(width: 8),
-                  Text(
-                    _formatTime(_elapsedSeconds),
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
+    // Determine current step based on progress
+    int currentStep = 1;
+    if (_progress > 0.3) currentStep = 2;
+    if (_progress > 0.8) currentStep = 3;
+
+    final List<Map<String, dynamic>> steps = [
+      {'title': 'Phân tích', 'icon': Icons.search},
+      {'title': 'AI Xóa', 'icon': Icons.auto_fix_high},
+      {'title': 'Hoàn thiện', 'icon': Icons.check_circle_outline},
+    ];
+
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Colors.grey[50]!, Colors.grey[200]!],
+        ),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          // Upper Section: Icon & Steps
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 40),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: List.generate(steps.length, (index) {
+                bool isActive = currentStep >= index + 1;
+                bool isDone = currentStep > index + 1;
+                return Column(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: isDone ? Colors.green : (isActive ? Colors.deepPurple : Colors.white),
+                        shape: BoxShape.circle,
+                        boxShadow: isActive ? [BoxShadow(color: Colors.deepPurple.withOpacity(0.3), blurRadius: 8)] : [],
+                      ),
+                      child: Icon(
+                        isDone ? Icons.check : steps[index]['icon'] as IconData,
+                        color: (isActive || isDone) ? Colors.white : Colors.grey[400],
+                        size: 20,
+                      ),
                     ),
+                    const SizedBox(height: 6),
+                    Text(
+                      steps[index]['title'] as String,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+                        color: isActive ? Colors.deepPurple : Colors.grey[500],
+                      ),
+                    ),
+                  ],
+                );
+              }),
+            ),
+          ),
+          
+          const SizedBox(height: 60),
+
+          // Central Pulse Animation
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              _buildPulseCircle(160, Colors.deepPurple.withOpacity(0.05)),
+              _buildPulseCircle(120, Colors.deepPurple.withOpacity(0.1)),
+              Container(
+                width: 90,
+                height: 90,
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                  boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 15, spreadRadius: 2)],
+                ),
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        _formatTime(_elapsedSeconds),
+                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: Colors.deepPurple),
+                      ),
+                      const Text('elapsed', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                    ],
+                  ),
+                ),
+              ),
+              // Circular progress
+              SizedBox(
+                width: 100,
+                height: 100,
+                child: CircularProgressIndicator(
+                  value: _progress,
+                  strokeWidth: 4,
+                  valueColor: const AlwaysStoppedAnimation<Color>(Colors.deepPurple),
+                  backgroundColor: Colors.transparent,
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 50),
+
+          // Status & Info Card
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 30),
+            child: Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.8),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: Colors.white),
+              ),
+              child: Column(
+                children: [
+                  Text(
+                    _status,
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                  ),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Quá trình này thường mất 15-45 giây',
+                    style: TextStyle(color: Colors.deepPurple, fontWeight: FontWeight.w600, fontSize: 13),
+                  ),
+                  const SizedBox(height: 20),
+                  const Divider(height: 1),
+                  const SizedBox(height: 15),
+                  // Rotating Tips
+                  Row(
+                    children: [
+                      const Icon(Icons.lightbulb_outline, color: Colors.orange, size: 20),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 500),
+                          child: Text(
+                            _loadingTips[_currentTipIndex],
+                            key: ValueKey<int>(_currentTipIndex),
+                            style: TextStyle(color: Colors.grey[700], fontStyle: FontStyle.italic, fontSize: 13),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
             ),
-            
-            const SizedBox(height: 32),
-            
-            // Info text
-            Text(
-              'This may take 13-15 minutes',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey[600],
-              ),
-            ),
-            
-            const SizedBox(height: 8),
-            
-            Text(
-              'Using AI to remove object and\ngenerate empty room',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey[500],
-              ),
-            ),
-          ],
-        ),
+          ),
+          
+          const SizedBox(height: 40),
+          
+          Text(
+            'Powered by AI Removal Engine',
+            style: TextStyle(color: Colors.grey[400], fontSize: 11, letterSpacing: 1),
+          ),
+        ],
       ),
+    );
+  }
+
+  Widget _buildPulseCircle(double size, Color color) {
+    return TweenAnimationBuilder(
+      tween: Tween<double>(begin: 0.8, end: 1.2),
+      duration: const Duration(seconds: 2),
+      curve: Curves.easeInOut,
+      builder: (context, double value, child) {
+        return Container(
+          width: size * value,
+          height: size * value,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        );
+      },
+      onEnd: () => setState(() {}),
     );
   }
 

@@ -10,8 +10,6 @@ class AppConfig {
 
   static String get baseUrl => _backendUrl;
 
-  static String get predictEndpoint => "$baseUrl/predict";
-
   // Timeout configuration (increased for SAM processing)
   static const Duration uploadTimeout = Duration(seconds: 120);
   static const Duration receiveTimeout = Duration(seconds: 120);

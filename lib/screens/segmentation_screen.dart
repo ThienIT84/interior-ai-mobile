@@ -105,9 +105,7 @@ class _SegmentationScreenState extends State<SegmentationScreen> {
         _imageId = result['image_id'] as String;
         _imageWidth = result['image_width'] as int;
         _imageHeight = result['image_height'] as int;
-        _status = _selectedSegmentationBackend == _backendSam3 
-            ? 'Chạm vào vật thể hoặc nhập mô tả' 
-            : 'Chạm vào vật thể bạn muốn chọn';
+        _status = 'Ông họa sĩ AI đã sẵn sàng! Chạm vào vật thể em muốn chọn.';
         _isLoading = false;
       });
     } catch (e) {
@@ -431,16 +429,28 @@ class _SegmentationScreenState extends State<SegmentationScreen> {
           const SizedBox(height: 12),
           SizedBox(
             width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: _maskId != null ? _goToInpainting : null,
-              icon: const Icon(Icons.arrow_forward),
-              label: const Text('Remove Object'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-              ),
-            ),
+            child: _maskId != null
+                ? ElevatedButton.icon(
+                    onPressed: _goToInpainting,
+                    icon: const Icon(Icons.delete_sweep),
+                    label: const Text('Remove Object'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                    ),
+                  )
+                : ElevatedButton.icon(
+                    onPressed: _textPromptController.text.isNotEmpty ? _performSegmentation : null,
+                    icon: const Icon(Icons.search),
+                    label: const Text('Find Object'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.orange,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      disabledBackgroundColor: Colors.grey.shade300,
+                    ),
+                  ),
           ),
         ],
       ),
