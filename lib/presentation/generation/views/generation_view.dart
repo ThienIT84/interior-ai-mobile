@@ -517,25 +517,32 @@ class _GenerationViewState extends State<GenerationView>
                         color: isSelected ? AppColors.primary : AppColors.textSecondary,
                       ),
                       const SizedBox(width: 8),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            model.displayName,
-                            style: GoogleFonts.montserrat(
-                              fontSize: 13,
-                              fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                              color: isSelected ? AppColors.primary : AppColors.textPrimary,
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              model.displayName,
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
+                              style: GoogleFonts.montserrat(
+                                fontSize: 13,
+                                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                                color: isSelected ? AppColors.primary : AppColors.textPrimary,
+                              ),
                             ),
-                          ),
-                          Text(
-                            model.subtitle,
-                            style: GoogleFonts.montserrat(
-                              fontSize: 10,
-                              color: AppColors.textDim,
+                            Text(
+                              model.subtitle,
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
+                              style: GoogleFonts.montserrat(
+                                fontSize: 10,
+                                color: AppColors.textDim,
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ],
                   ),
