@@ -12,7 +12,7 @@ class ApiService {
   /// Upload image and get image_id plus image dimensions
   Future<Map<String, dynamic>> uploadImage(File imageFile) async {
     try {
-      var uri = Uri.parse('${AppConfig.baseUrl}/api/v1/segmentation/upload');
+      var uri = Uri.parse('${AppConfig.baseUrl}/api/v1/segmentation/segment');
       var request = http.MultipartRequest('POST', uri);
       request.files.add(
         await http.MultipartFile.fromPath('file', imageFile.path),
