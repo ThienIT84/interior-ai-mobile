@@ -43,7 +43,17 @@ class ModelOption {
 ///   1. Generate Design – applies a style to the whole room
 ///   2. Place Furniture – inpaints an object inside a user-drawn bbox
 class GenerationProvider with ChangeNotifier {
-  final RemoteDataSource _dataSource = RemoteDataSource();
+  GenerationProvider({
+    RemoteDataSource? dataSource,
+    Duration pollInterval = const Duration(seconds: 3),
+    int maxPolls = 300,
+  }) : _dataSource = dataSource ?? RemoteDataSource(),
+       _pollInterval = pollInterval,
+       _maxPolls = maxPolls;
+
+  final RemoteDataSource _dataSource;
+  final Duration _pollInterval;
+  final int _maxPolls;
 
   // ── Available AI models ───────────────────────────────────────────
   static const List<ModelOption> modelOptions = [
@@ -112,7 +122,7 @@ class GenerationProvider with ChangeNotifier {
 
   /// Default icon + gradient mapping for known style names
   static const Map<String, ({IconData icon, List<Color> gradient})>
-      _styleVisuals = {
+  _styleVisuals = {
     'modern': (
       icon: Icons.weekend_outlined,
       gradient: [Color(0xFF667EEA), Color(0xFF764BA2)],
@@ -137,7 +147,7 @@ class GenerationProvider with ChangeNotifier {
 
   /// Localization overrides for backend styles
   static const Map<String, ({String displayName, String description})>
-      _styleLocalization = {
+  _styleLocalization = {
     'modern': (
       displayName: 'Modern',
       description: 'Clean lines and a polished look for a contemporary space.',
@@ -148,7 +158,8 @@ class GenerationProvider with ChangeNotifier {
     ),
     'minimalist': (
       displayName: 'Minimalist',
-      description: 'Focus on simplicity and functionality with minimal clutter.',
+      description:
+          'Focus on simplicity and functionality with minimal clutter.',
     ),
     'industrial': (
       displayName: 'Industrial',
@@ -160,7 +171,8 @@ class GenerationProvider with ChangeNotifier {
     ),
     'scandinavian': (
       displayName: 'Scandinavian',
-      description: 'Bright, airy, and warm with natural wood and soft textures.',
+      description:
+          'Bright, airy, and warm with natural wood and soft textures.',
     ),
     // Vietnamese aliases to catch backend strings
     'hiện đại': (
@@ -173,11 +185,13 @@ class GenerationProvider with ChangeNotifier {
     ),
     'tối giản': (
       displayName: 'Minimalist',
-      description: 'Focus on simplicity and functionality with minimal clutter.',
+      description:
+          'Focus on simplicity and functionality with minimal clutter.',
     ),
     'phong cách tối giản': (
       displayName: 'Minimalist',
-      description: 'Focus on simplicity and functionality with minimal clutter.',
+      description:
+          'Focus on simplicity and functionality with minimal clutter.',
     ),
     'công nghiệp': (
       displayName: 'Industrial',
@@ -189,7 +203,8 @@ class GenerationProvider with ChangeNotifier {
     ),
     'bắc âu': (
       displayName: 'Scandinavian',
-      description: 'Bright, airy, and warm with natural wood and soft textures.',
+      description:
+          'Bright, airy, and warm with natural wood and soft textures.',
     ),
   };
 
@@ -201,24 +216,36 @@ class GenerationProvider with ChangeNotifier {
       final rawStyles = await _dataSource.getStyles();
       _styles = rawStyles.map((s) {
         String name = (s['name'] as String?)?.toLowerCase() ?? 'unknown';
-        
+
         // Match visualization (using English key if possible)
         String visualKey = name;
-        if (name.contains('modern') || name.contains('hiện đại')) visualKey = 'modern';
-        if (name.contains('minimalist') || name.contains('tối giản')) visualKey = 'minimalist';
-        if (name.contains('industrial') || name.contains('công nghiệp')) visualKey = 'industrial';
-        if (name.contains('indochine') || name.contains('đông dương')) visualKey = 'indochine';
-        if (name.contains('scandinavian') || name.contains('bắc âu')) visualKey = 'scandinavian';
+        if (name.contains('modern') || name.contains('hiện đại')) {
+          visualKey = 'modern';
+        }
+        if (name.contains('minimalist') || name.contains('tối giản')) {
+          visualKey = 'minimalist';
+        }
+        if (name.contains('industrial') || name.contains('công nghiệp')) {
+          visualKey = 'industrial';
+        }
+        if (name.contains('indochine') || name.contains('đông dương')) {
+          visualKey = 'indochine';
+        }
+        if (name.contains('scandinavian') || name.contains('bắc âu')) {
+          visualKey = 'scandinavian';
+        }
 
         final vis = _styleVisuals[visualKey];
         final loc = _styleLocalization[name] ?? _styleLocalization[visualKey];
-        
+
         return StyleOption(
           name: name,
-          displayName: loc?.displayName ?? (s['display_name'] as String?) ?? name,
+          displayName:
+              loc?.displayName ?? (s['display_name'] as String?) ?? name,
           description: loc?.description ?? (s['description'] as String?) ?? '',
           icon: vis?.icon ?? Icons.auto_awesome,
-          gradient: vis?.gradient ?? const [Color(0xFF9D50BB), Color(0xFF6E48AA)],
+          gradient:
+              vis?.gradient ?? const [Color(0xFF9D50BB), Color(0xFF6E48AA)],
         );
       }).toList();
     } catch (e) {
@@ -227,7 +254,8 @@ class GenerationProvider with ChangeNotifier {
         final loc = _styleLocalization[e.key];
         return StyleOption(
           name: e.key,
-          displayName: loc?.displayName ?? (e.key[0].toUpperCase() + e.key.substring(1)),
+          displayName:
+              loc?.displayName ?? (e.key[0].toUpperCase() + e.key.substring(1)),
           description: loc?.description ?? '',
           icon: e.value.icon,
           gradient: e.value.gradient,
@@ -259,6 +287,7 @@ class GenerationProvider with ChangeNotifier {
   String? get errorMessage => _errorMessage;
 
   Timer? _pollingTimer;
+  bool _disposed = false;
 
   /// Start a Generate Design job
   Future<void> generateDesign() async {
@@ -277,6 +306,7 @@ class GenerationProvider with ChangeNotifier {
         style: selectedStyle!.name,
         modelId: _selectedModelId,
       );
+      if (_disposed) return;
       _jobId = result['job_id'] as String?;
       _jobStatus = 'Processing on Cloud...';
       _jobProgress = 0.15;
@@ -308,7 +338,9 @@ class GenerationProvider with ChangeNotifier {
   }
 
   Future<void> placeFurniture() async {
-    if (_imageId == null || _boundingBox == null || _furnitureDescription.trim().isEmpty) {
+    if (_imageId == null ||
+        _boundingBox == null ||
+        _furnitureDescription.trim().isEmpty) {
       _errorMessage = 'Please draw a selection and input object description';
       notifyListeners();
       return;
@@ -330,6 +362,7 @@ class GenerationProvider with ChangeNotifier {
         h: _boundingBox!.height,
         description: _furnitureDescription.trim(),
       );
+      if (_disposed) return;
       _jobId = result['job_id'] as String?;
       _jobStatus = 'Creating furniture...';
       _jobProgress = 0.15;
@@ -346,21 +379,35 @@ class GenerationProvider with ChangeNotifier {
   // ── Polling ───────────────────────────────────────────────────────
   void _startPolling({required String type}) {
     _pollingTimer?.cancel();
-    _pollingTimer = Timer.periodic(const Duration(seconds: 3), (_) async {
+    var pollCount = 0;
+    _pollingTimer = Timer.periodic(_pollInterval, (timer) async {
+      if (_disposed) {
+        timer.cancel();
+        return;
+      }
       if (_jobId == null) return;
+      pollCount++;
+      if (pollCount > _maxPolls) {
+        timer.cancel();
+        _isGenerating = false;
+        _jobStatus = 'Timed out';
+        _errorMessage = 'Processing timeout. Please try again.';
+        if (!_disposed) notifyListeners();
+        return;
+      }
       try {
         final status = await _dataSource.checkJobStatus(_jobId!, type: type);
         final st = status['status'] as String?;
+        final remoteProgress = (status['progress'] as num?)?.toDouble();
 
         if (st == 'processing') {
           _jobStatus = 'AI Processing...';
-          _jobProgress = 0.5;
-          notifyListeners();
+          _jobProgress = remoteProgress ?? 0.5;
+          if (!_disposed) notifyListeners();
         } else if (st == 'completed') {
           _stopPolling();
           _jobStatus = 'Complete!';
           _jobProgress = 1.0;
-
 
           if (type == 'generation') {
             final resultId = status['result_id'] as String?;
@@ -371,7 +418,8 @@ class GenerationProvider with ChangeNotifier {
             }
           } else {
             final meta = status['metadata'] as Map<String, dynamic>?;
-            final resultId = (meta?['result_id'] ?? status['result_id']) as String?;
+            final resultId =
+                (meta?['result_id'] ?? status['result_id']) as String?;
             if (resultId != null) {
               _resultImageUrl = _dataSource.getPlacementResultUrl(resultId);
             } else {
@@ -380,13 +428,13 @@ class GenerationProvider with ChangeNotifier {
           }
 
           _isGenerating = false;
-          notifyListeners();
+          if (!_disposed) notifyListeners();
         } else if (st == 'failed') {
           _stopPolling();
           _isGenerating = false;
           _errorMessage = status['error'] as String? ?? 'Unknown error';
           _jobStatus = 'Failed';
-          notifyListeners();
+          if (!_disposed) notifyListeners();
         }
       } catch (e) {
         // Don't stop polling on transient errors
@@ -416,6 +464,7 @@ class GenerationProvider with ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
     _stopPolling();
     super.dispose();
   }

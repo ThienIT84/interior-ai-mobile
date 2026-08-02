@@ -33,12 +33,14 @@ class _PulsingPointMarkerState extends State<PulsingPointMarker>
       vsync: this,
     )..repeat();
 
-    _scaleAnimation = Tween<double>(begin: 1.0, end: 2.2).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeOut),
-    );
-    _opacityAnimation = Tween<double>(begin: 0.6, end: 0.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeOut),
-    );
+    _scaleAnimation = Tween<double>(
+      begin: 1.0,
+      end: 2.2,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
+    _opacityAnimation = Tween<double>(
+      begin: 0.6,
+      end: 0.0,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
   }
 
   @override
@@ -75,10 +77,7 @@ class _PulsingPointMarkerState extends State<PulsingPointMarker>
                     height: pulseSize,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      border: Border.all(
-                        color: AppColors.accent,
-                        width: 2,
-                      ),
+                      border: Border.all(color: AppColors.accent, width: 2),
                     ),
                   ),
                 ),
@@ -95,11 +94,11 @@ class _PulsingPointMarkerState extends State<PulsingPointMarker>
             height: markerSize,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: AppColors.accent.withOpacity(0.85),
+              color: AppColors.accent.withValues(alpha: 0.85),
               border: Border.all(color: Colors.white, width: 2.5),
               boxShadow: [
                 BoxShadow(
-                  color: AppColors.accent.withOpacity(0.4),
+                  color: AppColors.accent.withValues(alpha: 0.4),
                   blurRadius: 12,
                   spreadRadius: 2,
                 ),

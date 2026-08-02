@@ -1,11 +1,13 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:animate_do/animate_do.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 
+import '../../../core/constants/app_breakpoints.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/services/image_export_service.dart';
 import '../../../core/widgets/glass_container.dart';
+import '../../../data/datasources/remote_datasource.dart';
 import '../providers/generation_provider.dart';
 import '../widgets/style_selector.dart';
 import '../widgets/bbox_painter.dart';
@@ -26,7 +28,12 @@ class GenerationView extends StatefulWidget {
     super.key,
     required this.imageId,
     this.imageUrl,
+    this.dataSource,
+    this.imageExportService,
   });
+
+  final RemoteDataSource? dataSource;
+  final ImageExportService? imageExportService;
 
   @override
   State<GenerationView> createState() => _GenerationViewState();
@@ -35,6 +42,8 @@ class GenerationView extends StatefulWidget {
 class _GenerationViewState extends State<GenerationView>
     with SingleTickerProviderStateMixin {
   late GenerationProvider _provider;
+  late final RemoteDataSource _dataSource;
+  late final ImageExportService _imageExportService;
   late TabController _tabController;
   final TextEditingController _furnitureTextCtrl = TextEditingController();
 
@@ -44,7 +53,10 @@ class _GenerationViewState extends State<GenerationView>
   @override
   void initState() {
     super.initState();
-    _provider = GenerationProvider();
+    _dataSource = widget.dataSource ?? RemoteDataSource();
+    _imageExportService =
+        widget.imageExportService ?? createImageExportService();
+    _provider = GenerationProvider(dataSource: _dataSource);
     _provider.setImageContext(imageId: widget.imageId);
     _provider.loadStyles();
 
@@ -78,37 +90,51 @@ class _GenerationViewState extends State<GenerationView>
         extendBodyBehindAppBar: true,
         appBar: _buildAppBar(),
         body: SafeArea(
-          child: Column(
-            children: [
-              const SizedBox(height: 4),
-              // ─ Image area ──────────────────────────────────────
-              Expanded(
-                flex: 4, // Reduced from 5 to save vertical space
-                child: _buildImageArea(),
-              ),
-              // ─ Progress bar (visible during generation) ────────
-              if (_provider.isGenerating) _buildProgressSection(),
-              // ─ Error banner ────────────────────────────────────
-              if (_provider.errorMessage != null) _buildErrorBanner(),
-              // ─ Tabs ────────────────────────────────────────────
-              _buildTabBar(),
-              // ─ Tab content ─────────────────────────────────────
-              Expanded(
-                flex: 6, // Increased to ensure controls fit without scrolling
-                child: TabBarView(
-                  controller: _tabController,
-                  children: [
-                    _buildDesignTab(),
-                    _buildPlacementTab(),
-                  ],
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final desktop = constraints.maxWidth >= AppBreakpoints.desktop;
+              return Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(
+                    maxWidth: AppBreakpoints.maxContentWidth,
+                  ),
+                  child: desktop
+                      ? Row(
+                          children: [
+                            Expanded(child: _buildImageArea()),
+                            SizedBox(width: 430, child: _buildControlPanel()),
+                          ],
+                        )
+                      : Column(
+                          children: [
+                            const SizedBox(height: 4),
+                            Expanded(flex: 4, child: _buildImageArea()),
+                            Expanded(flex: 6, child: _buildControlPanel()),
+                          ],
+                        ),
                 ),
-              ),
-              // ─ Sticky Action Button ────────────────────────────
-              _buildStickyActionButton(),
-            ],
+              );
+            },
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildControlPanel() {
+    return Column(
+      children: [
+        if (_provider.isGenerating) _buildProgressSection(),
+        if (_provider.errorMessage != null) _buildErrorBanner(),
+        _buildTabBar(),
+        Expanded(
+          child: TabBarView(
+            controller: _tabController,
+            children: [_buildDesignTab(), _buildPlacementTab()],
+          ),
+        ),
+        _buildStickyActionButton(),
+      ],
     );
   }
 
@@ -118,7 +144,11 @@ class _GenerationViewState extends State<GenerationView>
       backgroundColor: Colors.transparent,
       elevation: 0,
       leading: IconButton(
-        icon: const Icon(Icons.arrow_back_ios_new, color: AppColors.textPrimary, size: 20),
+        icon: const Icon(
+          Icons.arrow_back_ios_new,
+          color: AppColors.textPrimary,
+          size: 20,
+        ),
         onPressed: () => Navigator.pop(context),
       ),
       title: Text(
@@ -166,8 +196,11 @@ class _GenerationViewState extends State<GenerationView>
     final url = widget.imageUrl ?? _provider.originalImageUrl;
     if (url == null) {
       return const Center(
-        child: Icon(Icons.image_not_supported_outlined,
-            color: AppColors.textDim, size: 48),
+        child: Icon(
+          Icons.image_not_supported_outlined,
+          color: AppColors.textDim,
+          size: 48,
+        ),
       );
     }
 
@@ -176,9 +209,19 @@ class _GenerationViewState extends State<GenerationView>
       return Stack(
         fit: StackFit.expand,
         children: [
-          Image.network(url, fit: BoxFit.contain, errorBuilder: (_, __, ___) =>
-              const Center(child: Icon(Icons.broken_image, color: AppColors.textDim, size: 48))),
+          Image.network(
+            url,
+            fit: BoxFit.contain,
+            errorBuilder: (_, _, _) => const Center(
+              child: Icon(
+                Icons.broken_image,
+                color: AppColors.textDim,
+                size: 48,
+              ),
+            ),
+          ),
           BboxPainter(
+            imageProvider: NetworkImage(url),
             initialBox: _provider.boundingBox,
             onBboxChanged: (box) => _provider.setBoundingBox(box),
           ),
@@ -191,7 +234,10 @@ class _GenerationViewState extends State<GenerationView>
               child: Center(
                 child: GlassContainer(
                   borderRadius: 20,
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 6,
+                  ),
                   child: Text(
                     '👆  Draw a box to place object',
                     style: GoogleFonts.montserrat(
@@ -206,8 +252,13 @@ class _GenerationViewState extends State<GenerationView>
       );
     }
 
-    return Image.network(url, fit: BoxFit.contain, errorBuilder: (_, __, ___) =>
-        const Center(child: Icon(Icons.broken_image, color: AppColors.textDim, size: 48)));
+    return Image.network(
+      url,
+      fit: BoxFit.contain,
+      errorBuilder: (_, _, _) => const Center(
+        child: Icon(Icons.broken_image, color: AppColors.textDim, size: 48),
+      ),
+    );
   }
 
   Widget _buildBeforeAfterSlider() {
@@ -229,17 +280,23 @@ class _GenerationViewState extends State<GenerationView>
             children: [
               // After image (background)
               Positioned.fill(
-                child: Image.network(afterUrl, fit: BoxFit.contain,
-                  errorBuilder: (_, __, ___) =>
-                    Container(color: AppColors.surface)),
+                child: Image.network(
+                  afterUrl,
+                  fit: BoxFit.contain,
+                  errorBuilder: (_, _, _) =>
+                      Container(color: AppColors.surface),
+                ),
               ),
               // Before image (clipped)
               Positioned.fill(
                 child: ClipRect(
                   clipper: _BeforeClipper(_sliderPosition),
-                  child: Image.network(beforeUrl, fit: BoxFit.contain,
-                    errorBuilder: (_, __, ___) =>
-                      Container(color: AppColors.surface)),
+                  child: Image.network(
+                    beforeUrl,
+                    fit: BoxFit.contain,
+                    errorBuilder: (_, _, _) =>
+                        Container(color: AppColors.surface),
+                  ),
                 ),
               ),
               // Slider line
@@ -247,10 +304,7 @@ class _GenerationViewState extends State<GenerationView>
                 left: w * _sliderPosition - 1.5,
                 top: 0,
                 bottom: 0,
-                child: Container(
-                  width: 3,
-                  color: Colors.white,
-                ),
+                child: Container(width: 3, color: Colors.white),
               ),
               // Slider handle
               Positioned(
@@ -265,25 +319,21 @@ class _GenerationViewState extends State<GenerationView>
                     border: Border.all(color: Colors.white, width: 2),
                     boxShadow: [
                       BoxShadow(
-                        color: AppColors.primary.withOpacity(0.5),
+                        color: AppColors.primary.withValues(alpha: 0.5),
                         blurRadius: 12,
                       ),
                     ],
                   ),
-                  child: const Icon(Icons.compare_arrows, color: Colors.white, size: 18),
+                  child: const Icon(
+                    Icons.compare_arrows,
+                    color: Colors.white,
+                    size: 18,
+                  ),
                 ),
               ),
               // Labels
-              Positioned(
-                left: 12,
-                top: 12,
-                child: _sliderLabel('BEFORE'),
-              ),
-              Positioned(
-                right: 12,
-                top: 12,
-                child: _sliderLabel('AFTER'),
-              ),
+              Positioned(left: 12, top: 12, child: _sliderLabel('BEFORE')),
+              Positioned(right: 12, top: 12, child: _sliderLabel('AFTER')),
             ],
           ),
         );
@@ -323,7 +373,9 @@ class _GenerationViewState extends State<GenerationView>
                   child: Text(
                     _provider.jobStatus,
                     style: GoogleFonts.montserrat(
-                        fontSize: 12, color: AppColors.textSecondary),
+                      fontSize: 12,
+                      color: AppColors.textSecondary,
+                    ),
                   ),
                 ),
                 Text(
@@ -358,9 +410,9 @@ class _GenerationViewState extends State<GenerationView>
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: AppColors.error.withOpacity(0.15),
+        color: AppColors.error.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.error.withOpacity(0.4)),
+        border: Border.all(color: AppColors.error.withValues(alpha: 0.4)),
       ),
       child: Row(
         children: [
@@ -369,7 +421,10 @@ class _GenerationViewState extends State<GenerationView>
           Expanded(
             child: Text(
               _provider.errorMessage!,
-              style: GoogleFonts.montserrat(fontSize: 11, color: AppColors.error),
+              style: GoogleFonts.montserrat(
+                fontSize: 11,
+                color: AppColors.error,
+              ),
             ),
           ),
           GestureDetector(
@@ -403,18 +458,18 @@ class _GenerationViewState extends State<GenerationView>
         ),
         labelColor: Colors.black,
         unselectedLabelColor: AppColors.textSecondary,
-        labelStyle: GoogleFonts.montserrat(fontSize: 13, fontWeight: FontWeight.w700),
-        unselectedLabelStyle: GoogleFonts.montserrat(fontSize: 13, fontWeight: FontWeight.w500),
+        labelStyle: GoogleFonts.montserrat(
+          fontSize: 13,
+          fontWeight: FontWeight.w700,
+        ),
+        unselectedLabelStyle: GoogleFonts.montserrat(
+          fontSize: 13,
+          fontWeight: FontWeight.w500,
+        ),
         dividerHeight: 0,
         tabs: const [
-          Tab(
-            icon: Icon(Icons.auto_awesome, size: 18),
-            text: 'Design',
-          ),
-          Tab(
-            icon: Icon(Icons.chair_outlined, size: 18),
-            text: 'Placement',
-          ),
+          Tab(icon: Icon(Icons.auto_awesome, size: 18), text: 'Design'),
+          Tab(icon: Icon(Icons.chair_outlined, size: 18), text: 'Placement'),
         ],
       ),
     );
@@ -489,22 +544,31 @@ class _GenerationViewState extends State<GenerationView>
           return Expanded(
             child: Padding(
               padding: EdgeInsets.only(
-                right: model.id == GenerationProvider.modelOptions.first.id ? 6 : 0,
-                left: model.id == GenerationProvider.modelOptions.last.id ? 6 : 0,
+                right: model.id == GenerationProvider.modelOptions.first.id
+                    ? 6
+                    : 0,
+                left: model.id == GenerationProvider.modelOptions.last.id
+                    ? 6
+                    : 0,
               ),
               child: GestureDetector(
                 onTap: () => _provider.selectModel(model.id),
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 250),
                   curve: Curves.easeInOut,
-                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 8,
+                    horizontal: 10,
+                  ),
                   decoration: BoxDecoration(
                     color: isSelected
-                        ? AppColors.primary.withOpacity(0.15)
+                        ? AppColors.primary.withValues(alpha: 0.15)
                         : AppColors.surface,
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: isSelected ? AppColors.primary : AppColors.glassBorder,
+                      color: isSelected
+                          ? AppColors.primary
+                          : AppColors.glassBorder,
                       width: isSelected ? 1.5 : 1,
                     ),
                   ),
@@ -514,7 +578,9 @@ class _GenerationViewState extends State<GenerationView>
                       Icon(
                         model.icon,
                         size: 18,
-                        color: isSelected ? AppColors.primary : AppColors.textSecondary,
+                        color: isSelected
+                            ? AppColors.primary
+                            : AppColors.textSecondary,
                       ),
                       const SizedBox(width: 8),
                       Expanded(
@@ -528,8 +594,12 @@ class _GenerationViewState extends State<GenerationView>
                               maxLines: 1,
                               style: GoogleFonts.montserrat(
                                 fontSize: 13,
-                                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                                color: isSelected ? AppColors.primary : AppColors.textPrimary,
+                                fontWeight: isSelected
+                                    ? FontWeight.w700
+                                    : FontWeight.w500,
+                                color: isSelected
+                                    ? AppColors.primary
+                                    : AppColors.textPrimary,
                               ),
                             ),
                             Text(
@@ -591,9 +661,16 @@ class _GenerationViewState extends State<GenerationView>
                   fontSize: 13,
                   color: AppColors.textDim,
                 ),
-                prefixIcon: const Icon(Icons.edit_note, color: AppColors.primary, size: 22),
+                prefixIcon: const Icon(
+                  Icons.edit_note,
+                  color: AppColors.primary,
+                  size: 22,
+                ),
                 border: InputBorder.none,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 14,
+                ),
               ),
             ),
           ),
@@ -619,19 +696,80 @@ class _GenerationViewState extends State<GenerationView>
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 6, 20, 12),
       decoration: BoxDecoration(
-        color: AppColors.background.withOpacity(0.8),
+        color: AppColors.background.withValues(alpha: 0.8),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.2),
+            color: Colors.black.withValues(alpha: 0.2),
             blurRadius: 10,
             offset: const Offset(0, -2),
           ),
         ],
       ),
-      child: _provider.mode == GenerationMode.design
-          ? _buildGenerateButton()
-          : _buildPlaceButton(),
+      child: _provider.resultImageUrl != null
+          ? _buildResultActions()
+          : (_provider.mode == GenerationMode.design
+                ? _buildGenerateButton()
+                : _buildPlaceButton()),
     );
+  }
+
+  Widget _buildResultActions() {
+    return Row(
+      children: [
+        Expanded(
+          child: OutlinedButton.icon(
+            onPressed: () => _exportResult(share: false),
+            icon: const Icon(Icons.download_rounded),
+            label: const Text('Save'),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: OutlinedButton.icon(
+            onPressed: () => _exportResult(share: true),
+            icon: const Icon(Icons.share_outlined),
+            label: const Text('Share'),
+          ),
+        ),
+        const SizedBox(width: 10),
+        IconButton(
+          tooltip: 'Create another result',
+          onPressed: _provider.resetGeneration,
+          icon: const Icon(Icons.refresh_rounded),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _exportResult({required bool share}) async {
+    final url = _provider.resultImageUrl;
+    if (url == null || url.trim().isEmpty) return;
+    try {
+      final bytes = await _dataSource.fetchImageBytes(url);
+      final fileName =
+          'interior_design_${DateTime.now().millisecondsSinceEpoch}.png';
+      if (share) {
+        await _imageExportService.share(
+          bytes,
+          fileName,
+          'Check out my AI interior design! 🏠',
+        );
+      } else {
+        await _imageExportService.save(bytes, fileName);
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(share ? 'Share opened.' : 'Image saved.')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${share ? 'Share' : 'Save'} failed: $error'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+    }
   }
 
   Widget _quickSuggestion(String text) {
@@ -649,7 +787,10 @@ class _GenerationViewState extends State<GenerationView>
         ),
         child: Text(
           text,
-          style: GoogleFonts.montserrat(fontSize: 11, color: AppColors.textSecondary),
+          style: GoogleFonts.montserrat(
+            fontSize: 11,
+            color: AppColors.textSecondary,
+          ),
         ),
       ),
     );
@@ -670,19 +811,27 @@ class _GenerationViewState extends State<GenerationView>
                   width: 18,
                   height: 18,
                   child: CircularProgressIndicator(
-                      strokeWidth: 2, color: Colors.black))
+                    strokeWidth: 2,
+                    color: Colors.black,
+                  ),
+                )
               : const Icon(Icons.auto_awesome, size: 20),
           label: Text(
             _provider.isGenerating ? 'Generating...' : 'Generate Design',
-            style: GoogleFonts.montserrat(fontWeight: FontWeight.w700, fontSize: 15),
+            style: GoogleFonts.montserrat(
+              fontWeight: FontWeight.w700,
+              fontSize: 15,
+            ),
           ),
           style: ElevatedButton.styleFrom(
             backgroundColor: AppColors.primary,
             foregroundColor: Colors.black,
             disabledBackgroundColor: AppColors.surfaceLight,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
             elevation: canPress ? 6 : 0,
-            shadowColor: AppColors.primary.withOpacity(0.5),
+            shadowColor: AppColors.primary.withValues(alpha: 0.5),
           ),
         ),
       ),
@@ -690,7 +839,8 @@ class _GenerationViewState extends State<GenerationView>
   }
 
   Widget _buildPlaceButton() {
-    final canPress = !_provider.isGenerating &&
+    final canPress =
+        !_provider.isGenerating &&
         _provider.boundingBox != null &&
         _furnitureTextCtrl.text.trim().isNotEmpty;
     return SizedBox(
@@ -702,19 +852,28 @@ class _GenerationViewState extends State<GenerationView>
             ? const SizedBox(
                 width: 18,
                 height: 18,
-                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.black,
+                ),
+              )
             : const Icon(Icons.add_home_work_outlined, size: 20),
         label: Text(
           _provider.isGenerating ? 'Generating...' : 'Place Object',
-          style: GoogleFonts.montserrat(fontWeight: FontWeight.w700, fontSize: 15),
+          style: GoogleFonts.montserrat(
+            fontWeight: FontWeight.w700,
+            fontSize: 15,
+          ),
         ),
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.primary,
           foregroundColor: Colors.black,
           disabledBackgroundColor: AppColors.surfaceLight,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
           elevation: canPress ? 6 : 0,
-          shadowColor: AppColors.primary.withOpacity(0.5),
+          shadowColor: AppColors.primary.withValues(alpha: 0.5),
         ),
       ),
     );

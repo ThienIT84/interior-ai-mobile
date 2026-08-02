@@ -1,22 +1,31 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:animate_do/animate_do.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/constants/app_breakpoints.dart';
+import '../../../core/services/image_export_service.dart';
+import '../../../data/datasources/remote_datasource.dart';
+import '../../../data/models/app_image.dart';
+import '../../../core/utils/image_geometry.dart';
 import '../providers/segmentation_provider.dart';
 import '../widgets/pulsing_point_marker.dart';
 import '../../generation/views/generation_view.dart';
 import '../../inpainting/views/inpainting_view.dart';
 
 class SegmentationView extends StatefulWidget {
-  final File imageFile;
+  final AppImage image;
 
   const SegmentationView({
     super.key,
-    required this.imageFile,
+    required this.image,
+    this.dataSource,
+    this.imageExportService,
   });
+
+  final RemoteDataSource? dataSource;
+  final ImageExportService? imageExportService;
 
   @override
   State<SegmentationView> createState() => _SegmentationViewState();
@@ -29,8 +38,8 @@ class _SegmentationViewState extends State<SegmentationView> {
   @override
   void initState() {
     super.initState();
-    _provider = SegmentationProvider();
-    _provider.initialize(widget.imageFile);
+    _provider = SegmentationProvider(dataSource: widget.dataSource);
+    _provider.initialize(widget.image);
   }
 
   @override
@@ -42,27 +51,14 @@ class _SegmentationViewState extends State<SegmentationView> {
   Rect _getDisplayedImageRect(Size viewportSize) {
     final iw = _provider.imageWidth?.toDouble();
     final ih = _provider.imageHeight?.toDouble();
-    if (iw == null || ih == null || viewportSize.width <= 0 || viewportSize.height <= 0) {
+    if (iw == null ||
+        ih == null ||
+        viewportSize.width <= 0 ||
+        viewportSize.height <= 0) {
       return Rect.fromLTWH(0, 0, viewportSize.width, viewportSize.height);
     }
 
-    final imageAspect = iw / ih;
-    final viewportAspect = viewportSize.width / viewportSize.height;
-    double dw, dh, left, top;
-
-    if (imageAspect > viewportAspect) {
-      dw = viewportSize.width;
-      dh = dw / imageAspect;
-      left = 0;
-      top = (viewportSize.height - dh) / 2;
-    } else {
-      dh = viewportSize.height;
-      dw = dh * imageAspect;
-      top = 0;
-      left = (viewportSize.width - dw) / 2;
-    }
-
-    return Rect.fromLTWH(left, top, dw, dh);
+    return containedImageRect(viewport: viewportSize, image: Size(iw, ih));
   }
 
   void _handleTap(TapDownDetails details) {
@@ -90,14 +86,50 @@ class _SegmentationViewState extends State<SegmentationView> {
       child: Scaffold(
         backgroundColor: AppColors.background,
         body: SafeArea(
-          child: Column(
-            children: [
-              _buildAppBar(),
-              _buildStatusBar(),
-              _buildBackendSelector(),
-              Expanded(child: _buildImageCanvas()),
-              _buildBottomToolbar(),
-            ],
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final desktop = constraints.maxWidth >= AppBreakpoints.desktop;
+              return Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(
+                    maxWidth: AppBreakpoints.maxContentWidth,
+                  ),
+                  child: Column(
+                    children: [
+                      _buildAppBar(),
+                      if (desktop)
+                        Expanded(
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Expanded(child: _buildImageCanvas()),
+                              SizedBox(
+                                width: 400,
+                                child: SingleChildScrollView(
+                                  padding: const EdgeInsets.only(bottom: 16),
+                                  child: Column(
+                                    children: [
+                                      _buildStatusBar(),
+                                      _buildBackendSelector(),
+                                      _buildBottomToolbar(),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      else ...[
+                        _buildStatusBar(),
+                        _buildBackendSelector(),
+                        Expanded(child: _buildImageCanvas()),
+                        _buildBottomToolbar(),
+                      ],
+                    ],
+                  ),
+                ),
+              );
+            },
           ),
         ),
       ),
@@ -171,17 +203,17 @@ class _SegmentationViewState extends State<SegmentationView> {
           margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
           decoration: BoxDecoration(
             color: busy
-                ? AppColors.accent.withOpacity(0.15)
+                ? AppColors.accent.withValues(alpha: 0.15)
                 : (provider.hasMask
-                    ? AppColors.success.withOpacity(0.1)
-                    : AppColors.surface),
+                      ? AppColors.success.withValues(alpha: 0.1)
+                      : AppColors.surface),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
               color: busy
-                  ? AppColors.accent.withOpacity(0.3)
+                  ? AppColors.accent.withValues(alpha: 0.3)
                   : (provider.hasMask
-                      ? AppColors.success.withOpacity(0.2)
-                      : Colors.white10),
+                        ? AppColors.success.withValues(alpha: 0.2)
+                        : Colors.white10),
             ),
           ),
           child: Row(
@@ -201,7 +233,11 @@ class _SegmentationViewState extends State<SegmentationView> {
               if (provider.hasMask && !busy)
                 const Padding(
                   padding: EdgeInsets.only(right: 10),
-                  child: Icon(Icons.check_circle, color: AppColors.success, size: 18),
+                  child: Icon(
+                    Icons.check_circle,
+                    color: AppColors.success,
+                    size: 18,
+                  ),
                 ),
               Expanded(
                 child: Text(
@@ -215,9 +251,12 @@ class _SegmentationViewState extends State<SegmentationView> {
               ),
               if (provider.points.isNotEmpty)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
-                    color: AppColors.accent.withOpacity(0.15),
+                    color: AppColors.accent.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
@@ -254,17 +293,23 @@ class _SegmentationViewState extends State<SegmentationView> {
                     _buildBackendChip(
                       label: 'SAM Local',
                       icon: Icons.memory,
-                      isSelected: provider.selectedBackend == SegmentationProvider.backendLocal,
-                      onTap: () =>
-                          provider.changeBackend(SegmentationProvider.backendLocal),
+                      isSelected:
+                          provider.selectedBackend ==
+                          SegmentationProvider.backendLocal,
+                      onTap: () => provider.changeBackend(
+                        SegmentationProvider.backendLocal,
+                      ),
                     ),
                     const SizedBox(width: 8),
                     _buildBackendChip(
                       label: 'SAM 3',
                       icon: Icons.cloud_outlined,
-                      isSelected: provider.selectedBackend == SegmentationProvider.backendSam3,
-                      onTap: () =>
-                          provider.changeBackend(SegmentationProvider.backendSam3),
+                      isSelected:
+                          provider.selectedBackend ==
+                          SegmentationProvider.backendSam3,
+                      onTap: () => provider.changeBackend(
+                        SegmentationProvider.backendSam3,
+                      ),
                     ),
                     const SizedBox(width: 8),
                     if (provider.selectedModelName != null)
@@ -295,7 +340,11 @@ class _SegmentationViewState extends State<SegmentationView> {
                     child: Row(
                       children: [
                         const SizedBox(width: 12),
-                        const Icon(Icons.search, color: AppColors.textDim, size: 20),
+                        const Icon(
+                          Icons.search,
+                          color: AppColors.textDim,
+                          size: 20,
+                        ),
                         const SizedBox(width: 8),
                         Expanded(
                           child: TextField(
@@ -305,22 +354,27 @@ class _SegmentationViewState extends State<SegmentationView> {
                               fontSize: 14,
                             ),
                             decoration: InputDecoration(
-                              hintText: 'Describe the object (e.g. sofa, chair...)',
+                              hintText:
+                                  'Describe the object (e.g. sofa, chair...)',
                               hintStyle: GoogleFonts.montserrat(
                                 color: AppColors.textDim,
                                 fontSize: 13,
                               ),
                               border: InputBorder.none,
-                              contentPadding:
-                                  const EdgeInsets.symmetric(vertical: 12),
+                              contentPadding: const EdgeInsets.symmetric(
+                                vertical: 12,
+                              ),
                             ),
                             onSubmitted: (_) => provider.segmentWithTextOnly(),
                           ),
                         ),
                         IconButton(
                           onPressed: () => provider.segmentWithTextOnly(),
-                          icon: const Icon(Icons.send_rounded,
-                              color: AppColors.accent, size: 20),
+                          icon: const Icon(
+                            Icons.send_rounded,
+                            color: AppColors.accent,
+                            size: 20,
+                          ),
                         ),
                       ],
                     ),
@@ -346,7 +400,9 @@ class _SegmentationViewState extends State<SegmentationView> {
         duration: const Duration(milliseconds: 250),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
-          color: isSelected ? AppColors.accent.withOpacity(0.15) : AppColors.surface,
+          color: isSelected
+              ? AppColors.accent.withValues(alpha: 0.15)
+              : AppColors.surface,
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
             color: isSelected ? AppColors.accent : Colors.white10,
@@ -356,9 +412,11 @@ class _SegmentationViewState extends State<SegmentationView> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon,
-                size: 16,
-                color: isSelected ? AppColors.accent : AppColors.textDim),
+            Icon(
+              icon,
+              size: 16,
+              color: isSelected ? AppColors.accent : AppColors.textDim,
+            ),
             const SizedBox(width: 6),
             Text(
               label,
@@ -384,10 +442,7 @@ class _SegmentationViewState extends State<SegmentationView> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                SpinKitPulsingGrid(
-                  color: AppColors.accent,
-                  size: 50,
-                ),
+                SpinKitPulsingGrid(color: AppColors.accent, size: 50),
                 const SizedBox(height: 20),
                 Text(
                   'Uploading to AI server...',
@@ -411,8 +466,10 @@ class _SegmentationViewState extends State<SegmentationView> {
             clipBehavior: Clip.antiAlias,
             child: LayoutBuilder(
               builder: (context, constraints) {
-                final viewportSize =
-                    Size(constraints.maxWidth, constraints.maxHeight);
+                final viewportSize = Size(
+                  constraints.maxWidth,
+                  constraints.maxHeight,
+                );
                 final imageRect = _getDisplayedImageRect(viewportSize);
 
                 return GestureDetector(
@@ -430,8 +487,8 @@ class _SegmentationViewState extends State<SegmentationView> {
                           top: imageRect.top,
                           width: imageRect.width,
                           height: imageRect.height,
-                          child: Image.file(
-                            widget.imageFile,
+                          child: Image.memory(
+                            widget.image.bytes,
                             fit: BoxFit.fill,
                           ),
                         ),
@@ -445,10 +502,11 @@ class _SegmentationViewState extends State<SegmentationView> {
                             child: Image.network(
                               '${provider.maskUrl}?t=${DateTime.now().millisecondsSinceEpoch}',
                               fit: BoxFit.fill,
-                              color: AppColors.accent
-                                  .withOpacity(provider.maskOpacity),
+                              color: AppColors.accent.withValues(
+                                alpha: provider.maskOpacity,
+                              ),
                               colorBlendMode: BlendMode.srcATop,
-                              errorBuilder: (_, __, ___) =>
+                              errorBuilder: (_, _, _) =>
                                   const SizedBox.shrink(),
                             ),
                           ),
@@ -564,7 +622,7 @@ class _SegmentationViewState extends State<SegmentationView> {
                 activeTrackColor: AppColors.accent,
                 inactiveTrackColor: Colors.white10,
                 thumbColor: AppColors.accent,
-                overlayColor: AppColors.accent.withOpacity(0.2),
+                overlayColor: AppColors.accent.withValues(alpha: 0.2),
                 trackHeight: 3,
                 thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
               ),
@@ -641,6 +699,8 @@ class _SegmentationViewState extends State<SegmentationView> {
         builder: (_) => InpaintingView(
           imageId: provider.imageId!,
           maskId: provider.maskId!,
+          dataSource: widget.dataSource,
+          imageExportService: widget.imageExportService,
         ),
       ),
     );
@@ -653,6 +713,8 @@ class _SegmentationViewState extends State<SegmentationView> {
         builder: (_) => GenerationView(
           imageId: provider.imageId!,
           imageUrl: provider.imageUrl,
+          dataSource: widget.dataSource,
+          imageExportService: widget.imageExportService,
         ),
       ),
     );
@@ -662,9 +724,7 @@ class _SegmentationViewState extends State<SegmentationView> {
     final bool canProceed = provider.hasMask;
 
     return GestureDetector(
-      onTap: canProceed
-          ? () => _navigateToInpainting(provider)
-          : null,
+      onTap: canProceed ? () => _navigateToInpainting(provider) : null,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 300),
         padding: const EdgeInsets.symmetric(vertical: 14),
@@ -679,7 +739,7 @@ class _SegmentationViewState extends State<SegmentationView> {
           boxShadow: canProceed
               ? [
                   BoxShadow(
-                    color: AppColors.accent.withOpacity(0.3),
+                    color: AppColors.accent.withValues(alpha: 0.3),
                     blurRadius: 12,
                     offset: const Offset(0, 4),
                   ),
@@ -690,7 +750,9 @@ class _SegmentationViewState extends State<SegmentationView> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
-              canProceed ? Icons.cleaning_services_rounded : Icons.touch_app_outlined,
+              canProceed
+                  ? Icons.cleaning_services_rounded
+                  : Icons.touch_app_outlined,
               color: canProceed ? Colors.white : AppColors.textDim,
               size: 20,
             ),
@@ -714,4 +776,3 @@ class _SegmentationViewState extends State<SegmentationView> {
     );
   }
 }
-

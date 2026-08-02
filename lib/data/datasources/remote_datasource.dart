@@ -1,17 +1,31 @@
 import 'dart:convert';
-import 'dart:io';
+import 'dart:typed_data';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 import '../../core/constants/app_config.dart';
+import '../models/app_image.dart';
 
 class RemoteDataSource {
+  RemoteDataSource({http.Client? client}) : _client = client ?? http.Client();
+
+  final http.Client _client;
   final String _baseUrl = AppConfig.baseUrl;
 
-  Future<Map<String, dynamic>> uploadImage(File imageFile) async {
+  Future<Map<String, dynamic>> uploadImage(AppImage image) async {
     final uri = Uri.parse('$_baseUrl/api/v1/segmentation/segment');
     final request = http.MultipartRequest('POST', uri);
-    request.files.add(await http.MultipartFile.fromPath('file', imageFile.path));
+    request.files.add(
+      http.MultipartFile.fromBytes(
+        'file',
+        image.bytes,
+        filename: image.fileName,
+        contentType: MediaType.parse(image.mimeType),
+      ),
+    );
 
-    final streamedResponse = await request.send().timeout(AppConfig.uploadTimeout);
+    final streamedResponse = await _client
+        .send(request)
+        .timeout(AppConfig.uploadTimeout);
     final response = await http.Response.fromStream(streamedResponse);
 
     if (response.statusCode == 200) {
@@ -32,16 +46,18 @@ class RemoteDataSource {
     String? textPrompt,
   }) async {
     final uri = Uri.parse('$_baseUrl/api/v1/segmentation/segment-points');
-    final response = await http.post(
-      uri,
-      headers: {'Content-Type': 'application/json'},
-      body: json.encode({
-        'image_id': imageId,
-        'points': points,
-        if (backend != null) 'segmentation_backend': backend,
-        if (textPrompt != null) 'text_prompt': textPrompt,
-      }),
-    ).timeout(AppConfig.receiveTimeout);
+    final response = await _client
+        .post(
+          uri,
+          headers: {'Content-Type': 'application/json'},
+          body: json.encode({
+            'image_id': imageId,
+            'points': points,
+            'segmentation_backend': ?backend,
+            'text_prompt': ?textPrompt,
+          }),
+        )
+        .timeout(AppConfig.receiveTimeout);
 
     if (response.statusCode == 200) {
       return json.decode(response.body);
@@ -54,11 +70,13 @@ class RemoteDataSource {
     required String maskId,
   }) async {
     final uri = Uri.parse('$_baseUrl/api/v1/inpainting/remove-object-async');
-    final response = await http.post(
-      uri,
-      headers: {'Content-Type': 'application/json'},
-      body: json.encode({'image_id': imageId, 'mask_id': maskId}),
-    ).timeout(AppConfig.receiveTimeout);
+    final response = await _client
+        .post(
+          uri,
+          headers: {'Content-Type': 'application/json'},
+          body: json.encode({'image_id': imageId, 'mask_id': maskId}),
+        )
+        .timeout(AppConfig.receiveTimeout);
 
     if (response.statusCode == 200) {
       return json.decode(response.body)['job_id'];
@@ -66,7 +84,10 @@ class RemoteDataSource {
     throw Exception('Inpainting submission failed');
   }
 
-  Future<Map<String, dynamic>> checkJobStatus(String jobId, {required String type}) async {
+  Future<Map<String, dynamic>> checkJobStatus(
+    String jobId, {
+    required String type,
+  }) async {
     String path;
     if (type == 'inpainting') {
       path = '/api/v1/inpainting/job-status/$jobId';
@@ -77,7 +98,7 @@ class RemoteDataSource {
     }
 
     final uri = Uri.parse('$_baseUrl$path');
-    final response = await http.get(uri).timeout(AppConfig.jobStatusTimeout);
+    final response = await _client.get(uri).timeout(AppConfig.jobStatusTimeout);
 
     if (response.statusCode == 200) {
       return json.decode(response.body);
@@ -87,19 +108,27 @@ class RemoteDataSource {
 
   Future<Map<String, dynamic>> placeFurniture({
     required String imageId,
-    required double x, required double y, required double w, required double h,
+    required double x,
+    required double y,
+    required double w,
+    required double h,
     required String description,
   }) async {
     final uri = Uri.parse('$_baseUrl/api/v1/generation/place-furniture');
-    final response = await http.post(
-      uri,
-      headers: {'Content-Type': 'application/json'},
-      body: json.encode({
-        'image_id': imageId,
-        'bbox_x': x, 'bbox_y': y, 'bbox_w': w, 'bbox_h': h,
-        'furniture_description': description,
-      }),
-    ).timeout(AppConfig.receiveTimeout);
+    final response = await _client
+        .post(
+          uri,
+          headers: {'Content-Type': 'application/json'},
+          body: json.encode({
+            'image_id': imageId,
+            'bbox_x': x,
+            'bbox_y': y,
+            'bbox_w': w,
+            'bbox_h': h,
+            'furniture_description': description,
+          }),
+        )
+        .timeout(AppConfig.receiveTimeout);
 
     if (response.statusCode == 200) {
       return json.decode(response.body);
@@ -111,17 +140,25 @@ class RemoteDataSource {
     required String imageId,
     required String style,
     String? modelId,
+    double? guidanceScale,
+    int? steps,
+    int? seed,
   }) async {
     final uri = Uri.parse('$_baseUrl/api/v1/generation/generate-design');
-    final response = await http.post(
-      uri,
-      headers: {'Content-Type': 'application/json'},
-      body: json.encode({
-        'image_id': imageId,
-        'style': style,
-        if (modelId != null) 'model_id': modelId,
-      }),
-    ).timeout(AppConfig.receiveTimeout);
+    final response = await _client
+        .post(
+          uri,
+          headers: {'Content-Type': 'application/json'},
+          body: json.encode({
+            'image_id': imageId,
+            'style': style,
+            'model_id': ?modelId,
+            'guidance_scale': ?guidanceScale,
+            'steps': ?steps,
+            'seed': ?seed,
+          }),
+        )
+        .timeout(AppConfig.receiveTimeout);
 
     if (response.statusCode == 200) {
       return json.decode(response.body);
@@ -131,7 +168,9 @@ class RemoteDataSource {
 
   Future<Map<String, dynamic>> getSegmentationBackendDebug() async {
     final uri = Uri.parse('$_baseUrl/api/v1/segmentation/debug/backend');
-    final response = await http.get(uri).timeout(const Duration(seconds: 10));
+    final response = await _client
+        .get(uri)
+        .timeout(const Duration(seconds: 10));
 
     if (response.statusCode == 200) {
       return json.decode(response.body);
@@ -142,7 +181,7 @@ class RemoteDataSource {
   /// Fetch available design styles from backend
   Future<List<Map<String, dynamic>>> getStyles() async {
     final uri = Uri.parse('$_baseUrl/api/v1/generation/styles');
-    final response = await http.get(uri).timeout(AppConfig.jobStatusTimeout);
+    final response = await _client.get(uri).timeout(AppConfig.jobStatusTimeout);
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body);
@@ -151,9 +190,21 @@ class RemoteDataSource {
     throw Exception('Failed to fetch styles: ${response.statusCode}');
   }
 
-  String getImageUrl(String imageId) => '$_baseUrl/api/v1/segmentation/image/$imageId';
-  String getMaskUrl(String maskId) => '$_baseUrl/api/v1/segmentation/mask-image/$maskId';
-  String getInpaintingResultUrl(String resultId) => '$_baseUrl/api/v1/inpainting/result/$resultId';
-  String getPlacementResultUrl(String resultId) => '$_baseUrl/api/v1/generation/placement-result/$resultId';
-  String getGenerationResultUrl(String resultId) => '$_baseUrl/api/v1/generation/result/$resultId';
+  Future<Uint8List> fetchImageBytes(String pathOrUrl) async {
+    final uri = Uri.parse(AppConfig.resolveUrl(pathOrUrl));
+    final response = await _client.get(uri).timeout(AppConfig.receiveTimeout);
+    if (response.statusCode == 200) return response.bodyBytes;
+    throw Exception('Image download failed: ${response.statusCode}');
+  }
+
+  String getImageUrl(String imageId) =>
+      AppConfig.resolveUrl('/api/v1/segmentation/image/$imageId');
+  String getMaskUrl(String maskId) =>
+      AppConfig.resolveUrl('/api/v1/segmentation/mask-image/$maskId');
+  String getInpaintingResultUrl(String resultId) =>
+      AppConfig.resolveUrl('/api/v1/inpainting/result/$resultId');
+  String getPlacementResultUrl(String resultId) =>
+      AppConfig.resolveUrl('/api/v1/generation/placement-result/$resultId');
+  String getGenerationResultUrl(String resultId) =>
+      AppConfig.resolveUrl('/api/v1/generation/result/$resultId');
 }

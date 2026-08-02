@@ -12,33 +12,32 @@ class AppTheme {
         primary: AppColors.primary,
         secondary: AppColors.secondary,
         surface: AppColors.surface,
-        background: AppColors.background,
         error: AppColors.error,
         onPrimary: Colors.black,
         onSecondary: Colors.white,
         onSurface: AppColors.textPrimary,
-        onBackground: AppColors.textPrimary,
       ),
-      textTheme: GoogleFonts.montserratTextTheme(ThemeData.dark().textTheme).copyWith(
-        displayLarge: GoogleFonts.montserrat(
-          fontSize: 32,
-          fontWeight: FontWeight.bold,
-          color: AppColors.textPrimary,
-        ),
-        titleLarge: GoogleFonts.montserrat(
-          fontSize: 20,
-          fontWeight: FontWeight.w600,
-          color: AppColors.textPrimary,
-        ),
-        bodyLarge: GoogleFonts.montserrat(
-          fontSize: 16,
-          color: AppColors.textPrimary,
-        ),
-        bodyMedium: GoogleFonts.montserrat(
-          fontSize: 14,
-          color: AppColors.textSecondary,
-        ),
-      ),
+      textTheme: GoogleFonts.montserratTextTheme(ThemeData.dark().textTheme)
+          .copyWith(
+            displayLarge: GoogleFonts.montserrat(
+              fontSize: 32,
+              fontWeight: FontWeight.bold,
+              color: AppColors.textPrimary,
+            ),
+            titleLarge: GoogleFonts.montserrat(
+              fontSize: 20,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textPrimary,
+            ),
+            bodyLarge: GoogleFonts.montserrat(
+              fontSize: 16,
+              color: AppColors.textPrimary,
+            ),
+            bodyMedium: GoogleFonts.montserrat(
+              fontSize: 14,
+              color: AppColors.textSecondary,
+            ),
+          ),
       appBarTheme: const AppBarTheme(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -71,9 +70,7 @@ class AppTheme {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
-          textStyle: GoogleFonts.montserrat(
-            fontWeight: FontWeight.bold,
-          ),
+          textStyle: GoogleFonts.montserrat(fontWeight: FontWeight.bold),
         ),
       ),
     );

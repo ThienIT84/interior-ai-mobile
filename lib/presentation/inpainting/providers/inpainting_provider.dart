@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import '../../../services/api_service.dart';
+import '../../../data/datasources/remote_datasource.dart';
 
 enum InpaintingStatus {
   initializing,
@@ -11,20 +11,31 @@ enum InpaintingStatus {
 }
 
 class InpaintingProvider extends ChangeNotifier {
-  final ApiService _apiService = ApiService();
-  
+  InpaintingProvider({
+    RemoteDataSource? dataSource,
+    Duration pollInterval = const Duration(seconds: 3),
+    int maxPolls = 300,
+  }) : _dataSource = dataSource ?? RemoteDataSource(),
+       _pollInterval = pollInterval,
+       _maxPolls = maxPolls;
+
+  final RemoteDataSource _dataSource;
+  final Duration _pollInterval;
+  final int _maxPolls;
+
   String? _jobId;
   String? _imageId;
   String? _maskId;
-  
+
   InpaintingStatus _status = InpaintingStatus.initializing;
   double _progress = 0.0;
   String? _resultUrl;
   String? _errorMessage;
-  
+
   Timer? _pollTimer;
   int _elapsedSeconds = 0;
   Timer? _timeTimer;
+  bool _disposed = false;
 
   // Getters
   InpaintingStatus get status => _status;
@@ -32,7 +43,9 @@ class InpaintingProvider extends ChangeNotifier {
   String? get resultUrl => _resultUrl;
   String? get errorMessage => _errorMessage;
   int get elapsedSeconds => _elapsedSeconds;
-  bool get isProcessing => _status == InpaintingStatus.processing || _status == InpaintingStatus.submitting;
+  bool get isProcessing =>
+      _status == InpaintingStatus.processing ||
+      _status == InpaintingStatus.submitting;
   String? get imageId => _imageId;
 
   String get statusText {
@@ -59,6 +72,7 @@ class InpaintingProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
     _pollTimer?.cancel();
     _timeTimer?.cancel();
     super.dispose();
@@ -69,7 +83,7 @@ class InpaintingProvider extends ChangeNotifier {
     _timeTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (isProcessing) {
         _elapsedSeconds++;
-        notifyListeners();
+        _notify();
       }
     });
   }
@@ -81,50 +95,57 @@ class InpaintingProvider extends ChangeNotifier {
       _status = InpaintingStatus.submitting;
       _progress = 0.1;
       _errorMessage = null;
-      notifyListeners();
+      _notify();
 
-      final jobId = await _apiService.removeObjectAsync(
+      final jobId = await _dataSource.submitInpainting(
         imageId: _imageId!,
         maskId: _maskId!,
       );
+      if (_disposed) return;
 
       _jobId = jobId;
       _status = InpaintingStatus.processing;
       _progress = 0.2;
-      notifyListeners();
+      _notify();
 
       // Start polling
       _startPolling();
     } catch (e) {
       _status = InpaintingStatus.failed;
       _errorMessage = e.toString();
-      notifyListeners();
+      _notify();
     }
   }
 
   void _startPolling() {
     _pollTimer?.cancel();
     int pollCount = 0;
-    const maxPolls = 300; // 15 minutes
-    
-    _pollTimer = Timer.periodic(const Duration(seconds: 3), (timer) async {
+    _pollTimer = Timer.periodic(_pollInterval, (timer) async {
+      if (_disposed) {
+        timer.cancel();
+        return;
+      }
       if (_jobId == null) return;
-      
+
       pollCount++;
-      if (pollCount > maxPolls) {
+      if (pollCount > _maxPolls) {
         _status = InpaintingStatus.failed;
         _errorMessage = 'Processing timeout. Please try again.';
         timer.cancel();
-        notifyListeners();
+        _notify();
         return;
       }
 
       try {
-        final statusResponse = await _apiService.checkJobStatus(_jobId!);
-        
+        final statusResponse = await _dataSource.checkJobStatus(
+          _jobId!,
+          type: 'inpainting',
+        );
+
         final String remoteStatus = statusResponse['status'] ?? 'unknown';
-        _progress = (statusResponse['progress'] as num?)?.toDouble() ?? _progress;
-        
+        _progress =
+            (statusResponse['progress'] as num?)?.toDouble() ?? _progress;
+
         if (remoteStatus == 'completed') {
           _status = InpaintingStatus.completed;
           _resultUrl = statusResponse['result_url'];
@@ -134,8 +155,8 @@ class InpaintingProvider extends ChangeNotifier {
           _errorMessage = statusResponse['error'] ?? 'Unknown backend error';
           timer.cancel();
         }
-        
-        notifyListeners();
+
+        _notify();
       } catch (e) {
         // Continue polling on transient errors
       }
@@ -143,8 +164,13 @@ class InpaintingProvider extends ChangeNotifier {
   }
 
   void retry() {
+    _pollTimer?.cancel();
     _elapsedSeconds = 0;
     _resultUrl = null;
     _startInpainting();
+  }
+
+  void _notify() {
+    if (!_disposed) notifyListeners();
   }
 }

@@ -1,18 +1,15 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:animate_do/animate_do.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
-import 'package:http/http.dart' as http;
-import 'package:path_provider/path_provider.dart';
-import 'package:gal/gal.dart';
-import 'package:share_plus/share_plus.dart';
 
+import '../../../core/constants/app_breakpoints.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/services/image_export_service.dart';
 import '../../../core/widgets/glass_container.dart';
-import '../../../services/api_service.dart';
+import '../../../data/datasources/remote_datasource.dart';
 import '../../generation/views/generation_view.dart';
 import '../providers/inpainting_provider.dart';
 
@@ -24,7 +21,12 @@ class InpaintingView extends StatefulWidget {
     super.key,
     required this.imageId,
     required this.maskId,
+    this.dataSource,
+    this.imageExportService,
   });
+
+  final RemoteDataSource? dataSource;
+  final ImageExportService? imageExportService;
 
   @override
   State<InpaintingView> createState() => _InpaintingViewState();
@@ -32,11 +34,12 @@ class InpaintingView extends StatefulWidget {
 
 class _InpaintingViewState extends State<InpaintingView> {
   late InpaintingProvider _provider;
-  final ApiService _apiService = ApiService();
-  
+  late final RemoteDataSource _dataSource;
+  late final ImageExportService _imageExportService;
+
   // Slider position for before/after comparison
   double _sliderPosition = 0.5;
-  
+
   // Tips rotation
   int _currentTipIndex = 0;
   Timer? _tipTimer;
@@ -47,13 +50,16 @@ class _InpaintingViewState extends State<InpaintingView> {
     "Tip: Remove old furniture before designing to give AI more creative freedom.",
     "Analyzing surrounding pixels to fill the gap seamlessly.",
     "AI is recreating wood grains and wall patterns perfectly.",
-    "An empty room is the perfect canvas for a breakthrough design."
+    "An empty room is the perfect canvas for a breakthrough design.",
   ];
 
   @override
   void initState() {
     super.initState();
-    _provider = InpaintingProvider();
+    _dataSource = widget.dataSource ?? RemoteDataSource();
+    _imageExportService =
+        widget.imageExportService ?? createImageExportService();
+    _provider = InpaintingProvider(dataSource: _dataSource);
     _provider.initialize(widget.imageId, widget.maskId);
     _startTipTimer();
   }
@@ -92,9 +98,7 @@ class _InpaintingViewState extends State<InpaintingView> {
           backgroundColor: AppColors.background,
           extendBodyBehindAppBar: true,
           appBar: _buildAppBar(),
-          body: SafeArea(
-            child: _buildBody(),
-          ),
+          body: SafeArea(child: _buildBody()),
         );
       },
     );
@@ -105,7 +109,11 @@ class _InpaintingViewState extends State<InpaintingView> {
       backgroundColor: Colors.transparent,
       elevation: 0,
       leading: IconButton(
-        icon: const Icon(Icons.arrow_back_ios_new, color: AppColors.textPrimary, size: 20),
+        icon: const Icon(
+          Icons.arrow_back_ios_new,
+          color: AppColors.textPrimary,
+          size: 20,
+        ),
         onPressed: () => Navigator.pop(context),
       ),
       title: Text(
@@ -130,11 +138,18 @@ class _InpaintingViewState extends State<InpaintingView> {
       return _buildResultState();
     }
 
-    return _buildProcessingState();
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(
+          maxWidth: AppBreakpoints.maxContentWidth,
+        ),
+        child: _buildProcessingState(),
+      ),
+    );
   }
 
   // ── Processing State ──────────────────────────────────────────────────
-  
+
   Widget _buildProcessingState() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -147,13 +162,10 @@ class _InpaintingViewState extends State<InpaintingView> {
               alignment: Alignment.center,
               children: [
                 SpinKitRipple(
-                  color: AppColors.primary.withOpacity(0.3),
+                  color: AppColors.primary.withValues(alpha: 0.3),
                   size: 200,
                 ),
-                SpinKitDoubleBounce(
-                  color: AppColors.accent,
-                  size: 140,
-                ),
+                SpinKitDoubleBounce(color: AppColors.accent, size: 140),
                 Container(
                   width: 80,
                   height: 80,
@@ -162,10 +174,10 @@ class _InpaintingViewState extends State<InpaintingView> {
                     shape: BoxShape.circle,
                     boxShadow: [
                       BoxShadow(
-                        color: AppColors.primary.withOpacity(0.2),
+                        color: AppColors.primary.withValues(alpha: 0.2),
                         blurRadius: 20,
                         spreadRadius: 5,
-                      )
+                      ),
                     ],
                   ),
                   child: Center(
@@ -237,7 +249,11 @@ class _InpaintingViewState extends State<InpaintingView> {
               padding: const EdgeInsets.all(20),
               child: Row(
                 children: [
-                  const Icon(Icons.lightbulb_outline, color: AppColors.primary, size: 24),
+                  const Icon(
+                    Icons.lightbulb_outline,
+                    color: AppColors.primary,
+                    size: 24,
+                  ),
                   const SizedBox(width: 16),
                   Expanded(
                     child: AnimatedSwitcher(
@@ -264,7 +280,7 @@ class _InpaintingViewState extends State<InpaintingView> {
   }
 
   // ── Error State ───────────────────────────────────────────────────────
-  
+
   Widget _buildErrorState() {
     return Center(
       child: Padding(
@@ -300,10 +316,18 @@ class _InpaintingViewState extends State<InpaintingView> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primary,
                   foregroundColor: Colors.black,
-                  padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 40,
+                    vertical: 14,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
                 ),
-                child: const Text('Try Again', style: TextStyle(fontWeight: FontWeight.bold)),
+                child: const Text(
+                  'Try Again',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
               ),
             ],
           ),
@@ -313,127 +337,127 @@ class _InpaintingViewState extends State<InpaintingView> {
   }
 
   // ── Result State ──────────────────────────────────────────────────────
-  
-  Widget _buildResultState() {
-    return Column(
-      children: [
-        const SizedBox(height: 16),
-        // Image Area with Slider
-        Expanded(
-          flex: 6,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: AppColors.glassBorder),
-                color: AppColors.surface,
-              ),
-              clipBehavior: Clip.antiAlias,
-              child: _buildBeforeAfterSlider(),
-            ),
-          ),
-        ),
-        
-        // Success info
-        Padding(
-          padding: const EdgeInsets.fromLTRB(24, 24, 24, 8),
-          child: Row(
-            children: [
-              const Icon(Icons.check_circle, color: AppColors.success, size: 28),
-              const SizedBox(width: 12),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Transformation Complete!',
-                    style: GoogleFonts.montserrat(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                  Text(
-                    'Items removed in ${_formatTime(_provider.elapsedSeconds)}',
-                    style: GoogleFonts.montserrat(
-                      fontSize: 13,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
 
-        const Spacer(),
-        
-        // Actions
-        Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: _buildIconButton(
-                      icon: Icons.file_download_outlined,
-                      label: 'Save',
-                      onTap: () => _saveToGallery(),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: _buildIconButton(
-                      icon: Icons.share_outlined,
-                      label: 'Share',
-                      onTap: () => _shareImage(),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              GestureDetector(
-                onTap: () => _navigateToGeneration(),
-                child: Container(
-                  height: 60,
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [AppColors.accent, AppColors.secondary],
-                    ),
-                    borderRadius: BorderRadius.circular(18),
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppColors.accent.withOpacity(0.4),
-                        blurRadius: 15,
-                        offset: const Offset(0, 5),
-                      )
+  Widget _buildResultState() {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final desktop = constraints.maxWidth >= AppBreakpoints.desktop;
+        return Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(
+              maxWidth: AppBreakpoints.maxContentWidth,
+            ),
+            child: desktop
+                ? Row(
+                    children: [
+                      Expanded(child: _buildResultCanvas()),
+                      SizedBox(width: 400, child: _buildResultControls()),
+                    ],
+                  )
+                : Column(
+                    children: [
+                      Expanded(flex: 6, child: _buildResultCanvas()),
+                      _buildResultControls(),
                     ],
                   ),
-                  child: Center(
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(Icons.auto_awesome, color: Colors.white, size: 24),
-                        const SizedBox(width: 12),
-                        Text(
-                          'GENERATE DESIGN',
-                          style: GoogleFonts.montserrat(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w800,
-                            color: Colors.white,
-                            letterSpacing: 1.5,
-                          ),
-                        ),
-                      ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildResultCanvas() {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: AppColors.glassBorder),
+          color: AppColors.surface,
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: _buildBeforeAfterSlider(),
+      ),
+    );
+  }
+
+  Widget _buildResultControls() {
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.check_circle,
+                color: AppColors.success,
+                size: 28,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Transformation Complete!',
+                      style: GoogleFonts.montserrat(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary,
+                      ),
                     ),
-                  ),
+                    Text(
+                      'Items removed in ${_formatTime(_provider.elapsedSeconds)}',
+                      style: GoogleFonts.montserrat(
+                        fontSize: 13,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
-        ),
-      ],
+          const SizedBox(height: 24),
+          Row(
+            children: [
+              Expanded(
+                child: _buildIconButton(
+                  icon: Icons.file_download_outlined,
+                  label: 'Save',
+                  onTap: _saveToGallery,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: _buildIconButton(
+                  icon: Icons.share_outlined,
+                  label: 'Share',
+                  onTap: _shareImage,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            height: 60,
+            child: ElevatedButton.icon(
+              onPressed: _navigateToGeneration,
+              icon: const Icon(Icons.auto_awesome),
+              label: Text(
+                'GENERATE DESIGN',
+                style: GoogleFonts.montserrat(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 1.2,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -442,14 +466,17 @@ class _InpaintingViewState extends State<InpaintingView> {
       builder: (context, constraints) {
         final double w = constraints.maxWidth;
         final double h = constraints.maxHeight;
-        
-        final resultUrl = _apiService.getResultUrl(_provider.resultUrl!.split('/').last);
-        final originalUrl = _apiService.getImageUrl(_provider.imageId!);
+
+        final resultUrl = _dataSource.getInpaintingResultUrl(
+          _provider.resultUrl!.split('/').last,
+        );
+        final originalUrl = _dataSource.getImageUrl(_provider.imageId!);
 
         return GestureDetector(
           onHorizontalDragUpdate: (details) {
             setState(() {
-              _sliderPosition = (_sliderPosition + details.primaryDelta! / w).clamp(0.0, 1.0);
+              _sliderPosition = (_sliderPosition + details.primaryDelta! / w)
+                  .clamp(0.0, 1.0);
             });
           },
           child: Stack(
@@ -457,24 +484,21 @@ class _InpaintingViewState extends State<InpaintingView> {
             children: [
               // After Image (Base)
               Image.network(resultUrl, fit: BoxFit.contain),
-              
+
               // Before Image (Clipped)
               ClipRect(
                 clipper: SliderClipper(_sliderPosition),
                 child: Image.network(originalUrl, fit: BoxFit.contain),
               ),
-              
+
               // Divider line
               Positioned(
                 left: w * _sliderPosition - 1,
                 top: 0,
                 bottom: 0,
-                child: Container(
-                  width: 2,
-                  color: Colors.white,
-                ),
+                child: Container(width: 2, color: Colors.white),
               ),
-              
+
               // Handle
               Positioned(
                 left: w * _sliderPosition - 18,
@@ -488,26 +512,22 @@ class _InpaintingViewState extends State<InpaintingView> {
                     border: Border.all(color: Colors.white, width: 2),
                     boxShadow: [
                       BoxShadow(
-                        color: AppColors.primary.withOpacity(0.5),
+                        color: AppColors.primary.withValues(alpha: 0.5),
                         blurRadius: 12,
                       ),
                     ],
                   ),
-                  child: const Icon(Icons.unfold_more_rounded, color: Colors.black, size: 18),
+                  child: const Icon(
+                    Icons.unfold_more_rounded,
+                    color: Colors.black,
+                    size: 18,
+                  ),
                 ),
               ),
-              
+
               // Labels
-              Positioned(
-                left: 12,
-                top: 12,
-                child: _sliderLabel('BEFORE'),
-              ),
-              Positioned(
-                right: 12,
-                top: 12,
-                child: _sliderLabel('AFTER'),
-              ),
+              Positioned(left: 12, top: 12, child: _sliderLabel('BEFORE')),
+              Positioned(right: 12, top: 12, child: _sliderLabel('AFTER')),
             ],
           ),
         );
@@ -543,7 +563,7 @@ class _InpaintingViewState extends State<InpaintingView> {
         decoration: BoxDecoration(
           color: AppColors.surfaceLight,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.white.withOpacity(0.05)),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -567,40 +587,64 @@ class _InpaintingViewState extends State<InpaintingView> {
   // ── Logic ─────────────────────────────────────────────────────────────
 
   Future<void> _saveToGallery() async {
-    final resultUrl = _apiService.getResultUrl(_provider.resultUrl!.split('/').last);
     try {
-      final response = await http.get(Uri.parse(resultUrl));
-      if (response.statusCode == 200) {
-        await Gal.putImageBytes(
-          response.bodyBytes,
-          name: "clean_room_${DateTime.now().millisecondsSinceEpoch}",
-        );
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Saved to gallery!'), backgroundColor: AppColors.success),
-        );
-      }
-    } catch (e) {
+      final bytes = await _dataSource.fetchImageBytes(_resultImageUrl());
+      final fileName =
+          'clean_room_${DateTime.now().millisecondsSinceEpoch}.png';
+      await _imageExportService.save(bytes, fileName);
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Save failed: $e'), backgroundColor: AppColors.error),
+        const SnackBar(
+          content: Text('Image saved successfully.'),
+          backgroundColor: AppColors.success,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Save failed: $e'),
+          backgroundColor: AppColors.error,
+        ),
       );
     }
   }
 
   Future<void> _shareImage() async {
-    final resultUrl = _apiService.getResultUrl(_provider.resultUrl!.split('/').last);
     try {
-      final response = await http.get(Uri.parse(resultUrl));
-      if (response.statusCode == 200) {
-        final tempDir = await getTemporaryDirectory();
-        final file = File('${tempDir.path}/result.png');
-        await file.writeAsBytes(response.bodyBytes);
-        await Share.shareXFiles([XFile(file.path)], text: 'Check out my clean room! 🏠');
+      final bytes = await _dataSource.fetchImageBytes(_resultImageUrl());
+      final outcome = await _imageExportService.share(
+        bytes,
+        'clean_room_${DateTime.now().millisecondsSinceEpoch}.png',
+        'Check out my clean room! 🏠',
+      );
+      if (!mounted) return;
+      if (outcome == ImageShareOutcome.downloadedFallback) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Share opened. If file sharing is unavailable, the image was downloaded.',
+            ),
+          ),
+        );
       }
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Share failed: $e'), backgroundColor: AppColors.error),
+        SnackBar(
+          content: Text('Share failed: $e'),
+          backgroundColor: AppColors.error,
+        ),
       );
     }
+  }
+
+  String _resultImageUrl() {
+    final resultUrl = _provider.resultUrl;
+    if (resultUrl == null || resultUrl.trim().isEmpty) {
+      throw const FormatException('The result image URL is missing.');
+    }
+    return resultUrl;
   }
 
   void _navigateToGeneration() {
@@ -610,7 +654,9 @@ class _InpaintingViewState extends State<InpaintingView> {
       MaterialPageRoute(
         builder: (_) => GenerationView(
           imageId: resultId,
-          imageUrl: _apiService.getResultUrl(resultId),
+          imageUrl: _dataSource.getInpaintingResultUrl(resultId),
+          dataSource: _dataSource,
+          imageExportService: _imageExportService,
         ),
       ),
     );
@@ -627,5 +673,6 @@ class SliderClipper extends CustomClipper<Rect> {
   }
 
   @override
-  bool shouldReclip(SliderClipper oldClipper) => oldClipper.position != position;
+  bool shouldReclip(SliderClipper oldClipper) =>
+      oldClipper.position != position;
 }
