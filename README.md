@@ -18,6 +18,24 @@ Mobile app for AI-powered interior design with object removal and AR visualizati
 - Android device with USB debugging enabled
 - Backend running on WSL
 
+### Run on Web
+
+```bash
+flutter pub get
+flutter run -d chrome --dart-define=API_BASE_URL=http://localhost:8000
+```
+
+Release build:
+
+```bash
+flutter build web --release \
+  --dart-define=API_BASE_URL=http://localhost:8000
+```
+
+Chrome and Edge are the supported browsers for the MVP. The web app accepts
+JPG, PNG, and WebP images up to 15 MB. Camera capture remains available on
+Android; web uses the browser file picker.
+
 ### Run App (WiFi - Recommended)
 
 ```powershell
@@ -56,18 +74,10 @@ lib/
 
 ### API Endpoint
 
-Edit `lib/config.dart`:
+The API URL is injected at build time. It defaults to `http://localhost:8000`:
 
-```dart
-class AppConfig {
-  static String get baseUrl {
-    // WiFi mode (auto-updated by run_wifi.bat)
-    return "http://172.22.105.141:8000";
-    
-    // USB mode (after setup_adb.bat)
-    // return "http://localhost:8000";
-  }
-}
+```bash
+flutter run --dart-define=API_BASE_URL=http://192.168.1.10:8000
 ```
 
 ### Timeouts
@@ -164,7 +174,7 @@ dependencies:
     sdk: flutter
   http: ^1.2.0           # API calls
   image_picker: ^1.0.7   # Camera/gallery
-  
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -241,5 +251,5 @@ Then:
 
 ---
 
-**Current Status**: Week 2 Day 8-9 Complete ✅  
+**Current Status**: Week 2 Day 8-9 Complete ✅
 **Next**: Testing & optimization (Week 2 Day 10-14)

@@ -33,7 +33,7 @@ class StyleSelector extends StatelessWidget {
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 16),
         itemCount: styles.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 8), // Reduced from 10
+        separatorBuilder: (_, _) => const SizedBox(width: 8), // Reduced from 10
         itemBuilder: (context, index) {
           final style = styles[index];
           final isSelected = index == selectedIndex;
@@ -77,16 +77,18 @@ class _StyleCard extends StatelessWidget {
                 : [AppColors.surfaceLight, AppColors.surface],
           ),
           border: Border.all(
-            color: isSelected ? Colors.white.withOpacity(0.6) : AppColors.glassBorder,
+            color: isSelected
+                ? Colors.white.withValues(alpha: 0.6)
+                : AppColors.glassBorder,
             width: isSelected ? 1.5 : 1,
           ),
           boxShadow: isSelected
               ? [
                   BoxShadow(
-                    color: style.gradient.first.withOpacity(0.4),
+                    color: style.gradient.first.withValues(alpha: 0.4),
                     blurRadius: 10,
                     spreadRadius: 0,
-                  )
+                  ),
                 ]
               : [],
         ),

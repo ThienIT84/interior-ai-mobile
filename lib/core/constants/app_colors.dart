@@ -10,7 +10,7 @@ class AppColors {
   static const Color primary = Color(0xFFD4AF37); // Gold
   static const Color secondary = Color(0xFF9D50BB); // Purple
   static const Color accent = Color(0xFF6E48AA); // Deep Purple
-  
+
   // Status
   static const Color success = Color(0xFF4CAF50);
   static const Color error = Color(0xFFE53935);

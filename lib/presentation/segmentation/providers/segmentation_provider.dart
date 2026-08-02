@@ -1,15 +1,17 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
-import '../../../core/constants/app_config.dart';
 import '../../../core/providers/base_provider.dart';
 import '../../../data/datasources/remote_datasource.dart';
+import '../../../data/models/app_image.dart';
 import '../../../data/models/point_model.dart';
 
 class SegmentationProvider extends BaseProvider {
-  final RemoteDataSource _dataSource = RemoteDataSource();
+  SegmentationProvider({RemoteDataSource? dataSource})
+    : _dataSource = dataSource ?? RemoteDataSource();
+
+  final RemoteDataSource _dataSource;
 
   // ─── Image state ──────────────────────────────
-  File? _imageFile;
+  AppImage? _image;
   String? _imageId;
   int? _imageWidth;
   int? _imageHeight;
@@ -34,7 +36,7 @@ class SegmentationProvider extends BaseProvider {
   bool _isSegmenting = false;
 
   // ─── Getters ──────────────────────────────────
-  File? get imageFile => _imageFile;
+  AppImage? get image => _image;
   String? get imageId => _imageId;
   int? get imageWidth => _imageWidth;
   int? get imageHeight => _imageHeight;
@@ -60,13 +62,10 @@ class SegmentationProvider extends BaseProvider {
 
   // ─── Initialization ───────────────────────────
 
-  Future<void> initialize(File imageFile) async {
-    _imageFile = imageFile;
+  Future<void> initialize(AppImage image) async {
+    _image = image;
     notifyListeners();
-    await Future.wait([
-      _uploadImage(),
-      _loadBackendDebugInfo(),
-    ]);
+    await Future.wait([_uploadImage(), _loadBackendDebugInfo()]);
   }
 
   Future<void> _uploadImage() async {
@@ -75,7 +74,7 @@ class SegmentationProvider extends BaseProvider {
     notifyListeners();
 
     try {
-      final result = await _dataSource.uploadImage(_imageFile!);
+      final result = await _dataSource.uploadImage(_image!);
       _imageId = result['image_id'] as String;
       _imageWidth = result['image_width'] as int;
       _imageHeight = result['image_height'] as int;
@@ -107,8 +106,9 @@ class SegmentationProvider extends BaseProvider {
 
   void changeBackend(String backend) {
     _selectedBackend = backend;
-    _selectedModelName =
-        backend == backendSam3 ? 'mattsays/sam3-image' : 'local_sam:vit_b';
+    _selectedModelName = backend == backendSam3
+        ? 'mattsays/sam3-image'
+        : 'local_sam:vit_b';
     _maskId = null;
     _points.clear();
     _status = isSam3
@@ -174,8 +174,7 @@ class SegmentationProvider extends BaseProvider {
   }
 
   Future<void> _performSegmentation() async {
-    final textPrompt =
-        isSam3 ? textPromptController.text.trim() : null;
+    final textPrompt = isSam3 ? textPromptController.text.trim() : null;
     final hasPoints = _points.isNotEmpty;
     final hasText = textPrompt != null && textPrompt.isNotEmpty;
 
@@ -201,8 +200,9 @@ class SegmentationProvider extends BaseProvider {
       final backendUsed =
           result['segmentation_backend'] as String? ?? _selectedBackend;
 
-      String actionInfo =
-          hasPoints ? '${_points.length} point(s)' : 'text prompt';
+      String actionInfo = hasPoints
+          ? '${_points.length} point(s)'
+          : 'text prompt';
       _status =
           'Selection complete · ${backendLabel(backendUsed)} · $actionInfo';
     } catch (e) {
