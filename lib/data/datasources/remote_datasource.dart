@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 import '../../core/constants/app_config.dart';
+import '../exceptions/remote_data_source_exception.dart';
 import '../models/app_image.dart';
 
 class RemoteDataSource {
@@ -70,18 +72,71 @@ class RemoteDataSource {
     required String maskId,
   }) async {
     final uri = Uri.parse('$_baseUrl/api/v1/inpainting/remove-object-async');
-    final response = await _client
-        .post(
-          uri,
-          headers: {'Content-Type': 'application/json'},
-          body: json.encode({'image_id': imageId, 'mask_id': maskId}),
-        )
-        .timeout(AppConfig.receiveTimeout);
+    late final http.Response response;
+    try {
+      response = await _client
+          .post(
+            uri,
+            headers: {'Content-Type': 'application/json'},
+            body: json.encode({'image_id': imageId, 'mask_id': maskId}),
+          )
+          .timeout(AppConfig.receiveTimeout);
+    } on TimeoutException {
+      throw const RemoteDataSourceException(
+        message: 'The backend request timed out. Please try again.',
+        code: 'backend_timeout',
+      );
+    } on http.ClientException {
+      throw const RemoteDataSourceException(
+        message: 'The backend is unreachable. Check that it is running.',
+        code: 'backend_unreachable',
+      );
+    }
 
     if (response.statusCode == 200) {
-      return json.decode(response.body)['job_id'];
+      final data = json.decode(response.body) as Map<String, dynamic>;
+      final jobId = data['job_id'] as String?;
+      if (jobId == null || jobId.trim().isEmpty) {
+        throw const RemoteDataSourceException(
+          message: 'The backend returned an invalid job response.',
+          code: 'invalid_job_response',
+        );
+      }
+      return jobId;
     }
-    throw Exception('Inpainting submission failed');
+    throw _responseException(
+      response,
+      fallbackMessage: 'Inpainting submission failed.',
+    );
+  }
+
+  RemoteDataSourceException _responseException(
+    http.Response response, {
+    required String fallbackMessage,
+  }) {
+    String code = 'http_${response.statusCode}';
+    String message = fallbackMessage;
+
+    try {
+      final decoded = json.decode(response.body);
+      if (decoded is Map<String, dynamic>) {
+        final detail = decoded['detail'];
+        if (detail is Map<String, dynamic>) {
+          code = detail['code'] as String? ?? code;
+          message = detail['message'] as String? ?? message;
+        } else if (detail is String && detail.trim().isNotEmpty) {
+          message = detail;
+        }
+      }
+    } on FormatException {
+      // Keep the safe fallback for non-JSON backend responses.
+    }
+
+    return RemoteDataSourceException(
+      message: message,
+      code: code,
+      statusCode: response.statusCode,
+    );
   }
 
   Future<Map<String, dynamic>> checkJobStatus(

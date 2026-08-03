@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../../data/datasources/remote_datasource.dart';
+import '../../../data/exceptions/remote_data_source_exception.dart';
 
 enum InpaintingStatus {
   initializing,
@@ -110,9 +111,16 @@ class InpaintingProvider extends ChangeNotifier {
 
       // Start polling
       _startPolling();
-    } catch (e) {
+    } on RemoteDataSourceException catch (error) {
       _status = InpaintingStatus.failed;
-      _errorMessage = e.toString();
+      _errorMessage = error.isRedisUnavailable
+          ? 'Background processing is temporarily unavailable. '
+                'Please start Redis and try again.'
+          : error.message;
+      _notify();
+    } catch (_) {
+      _status = InpaintingStatus.failed;
+      _errorMessage = 'Inpainting submission failed. Please try again.';
       _notify();
     }
   }

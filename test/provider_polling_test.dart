@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:interior_frontend/data/datasources/remote_datasource.dart';
+import 'package:interior_frontend/data/exceptions/remote_data_source_exception.dart';
 import 'package:interior_frontend/presentation/generation/providers/generation_provider.dart';
 import 'package:interior_frontend/presentation/inpainting/providers/inpainting_provider.dart';
 
@@ -45,6 +46,20 @@ class _PollingDataSource extends RemoteDataSource {
   }) async => {'job_id': 'generation-1', 'status': 'pending'};
 }
 
+class _UnavailableInpaintingDataSource extends RemoteDataSource {
+  @override
+  Future<String> submitInpainting({
+    required String imageId,
+    required String maskId,
+  }) {
+    throw const RemoteDataSourceException(
+      message: 'Internal service message',
+      code: 'redis_unavailable',
+      statusCode: 503,
+    );
+  }
+}
+
 void main() {
   test('inpainting polling reaches completed state', () async {
     final provider = InpaintingProvider(
@@ -80,6 +95,20 @@ void main() {
       provider.dispose();
     },
   );
+
+  test('inpainting shows a friendly Redis unavailable error', () async {
+    final provider = InpaintingProvider(
+      dataSource: _UnavailableInpaintingDataSource(),
+    );
+
+    provider.initialize('image-1', 'mask-1');
+    await Future<void>.delayed(Duration.zero);
+
+    expect(provider.status, InpaintingStatus.failed);
+    expect(provider.errorMessage, contains('Please start Redis'));
+    expect(provider.errorMessage, isNot(contains('Internal service message')));
+    provider.dispose();
+  });
 
   test('generation polling resolves a local result URL', () async {
     final provider = GenerationProvider(

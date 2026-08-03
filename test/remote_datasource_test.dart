@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:interior_frontend/core/constants/app_config.dart';
 import 'package:interior_frontend/data/datasources/remote_datasource.dart';
+import 'package:interior_frontend/data/exceptions/remote_data_source_exception.dart';
 import 'package:interior_frontend/data/models/app_image.dart';
 
 void main() {
@@ -53,5 +54,55 @@ void main() {
       'https://cdn.example.com/result.png',
     );
     expect(() => AppConfig.resolveUrl('  '), throwsFormatException);
+  });
+
+  test('submitInpainting parses Redis unavailable response', () async {
+    final client = MockClient(
+      (_) async => http.Response(
+        jsonEncode({
+          'detail': {
+            'code': 'redis_unavailable',
+            'message': 'Background job service is temporarily unavailable.',
+          },
+        }),
+        503,
+        headers: {'content-type': 'application/json'},
+      ),
+    );
+    final source = RemoteDataSource(client: client);
+
+    await expectLater(
+      source.submitInpainting(imageId: 'image-1', maskId: 'mask-1'),
+      throwsA(
+        isA<RemoteDataSourceException>()
+            .having((error) => error.statusCode, 'statusCode', 503)
+            .having((error) => error.code, 'code', 'redis_unavailable')
+            .having(
+              (error) => error.isRedisUnavailable,
+              'isRedisUnavailable',
+              isTrue,
+            ),
+      ),
+    );
+  });
+
+  test('submitInpainting maps network failure safely', () async {
+    final client = MockClient(
+      (_) async => throw http.ClientException('socket details'),
+    );
+    final source = RemoteDataSource(client: client);
+
+    await expectLater(
+      source.submitInpainting(imageId: 'image-1', maskId: 'mask-1'),
+      throwsA(
+        isA<RemoteDataSourceException>()
+            .having((error) => error.code, 'code', 'backend_unreachable')
+            .having(
+              (error) => error.message,
+              'message',
+              isNot(contains('socket details')),
+            ),
+      ),
+    );
   });
 }
